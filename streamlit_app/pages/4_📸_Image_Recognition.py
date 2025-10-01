@@ -6,6 +6,7 @@ Recognize sake information from label photos using Claude vision model.
 
 import base64
 import io
+import json
 import sys
 from pathlib import Path
 
@@ -102,19 +103,35 @@ def main():
                         try:
                             # Convert image to base64
                             buffered = io.BytesIO()
-                            image.save(buffered, format=image.format or "JPEG")
+
+                            # Convert WEBP to JPEG for better compatibility
+                            if image.format == "WEBP":
+                                # Convert to RGB if necessary
+                                if image.mode != "RGB":
+                                    image = image.convert("RGB")
+                                image.save(buffered, format="JPEG", quality=95)
+                                media_type = "image/jpeg"
+                            else:
+                                image.save(buffered, format=image.format or "JPEG")
+                                # Get media type
+                                media_type_map = {
+                                    "JPEG": "image/jpeg",
+                                    "PNG": "image/png",
+                                }
+                                media_type = media_type_map.get(image.format, "image/jpeg")
+
                             img_base64 = base64.b64encode(buffered.getvalue()).decode()
 
-                            # Get media type
-                            media_type_map = {
-                                "JPEG": "image/jpeg",
-                                "PNG": "image/png",
-                                "WEBP": "image/webp",
-                            }
-                            media_type = media_type_map.get(image.format, "image/jpeg")
+                            # Debug info
+                            st.info(f"📊 画像情報: {len(img_base64)} bytes (base64), {media_type}")
 
                             # Call image recognition Lambda via AgentCore
                             result = backend_client.recognize_sake_label(img_base64, media_type)
+
+                            # Debug: Show raw result
+                            st.info(
+                                f"🔍 API Response: {json.dumps(result, indent=2, ensure_ascii=False)[:500]}..."
+                            )
 
                             if result and result.get("data"):
                                 sake_info = result["data"]
