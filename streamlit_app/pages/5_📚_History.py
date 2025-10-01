@@ -19,15 +19,23 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from components.auth import show_login_dialog
 from utils.backend_helper import BackendError, backend_client
+from utils.gamification import render_achievements_panel, render_user_stats_widget
 from utils.session import SessionManager
+from utils.ui_components import load_custom_css, render_stat_card
 
 st.set_page_config(page_title="History - Sake Sensei", page_icon="📚", layout="wide")
+
+# Load custom CSS
+load_custom_css()
 
 
 def main():
     """Main page function."""
-    st.title("📚 テイスティング履歴")
-    st.markdown("あなたの日本酒の旅を振り返りましょう")
+    st.markdown('<div class="main-header">📚 テイスティング履歴</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="sub-header">あなたの日本酒の旅を振り返りましょう</div>',
+        unsafe_allow_html=True,
+    )
 
     # Check authentication
     if not SessionManager.is_authenticated():
@@ -37,9 +45,17 @@ def main():
 
     st.markdown("---")
 
-    # Statistics
-    st.markdown("### 📊 統計情報")
+    # User stats widget and achievements
+    col_left, col_right = st.columns([2, 1])
 
+    with col_right:
+        user_id = SessionManager.get_user_id()
+        render_user_stats_widget(user_id)
+
+    with col_left:
+        st.markdown("### 📊 統計情報")
+
+    # Statistics with enhanced cards
     col1, col2, col3, col4 = st.columns(4)
 
     # Get statistics from backend
@@ -49,29 +65,34 @@ def main():
         with col1:
             total_records = stats.get("total_records", 0)
             monthly_records = stats.get("monthly_records", 0)
-            st.metric("試飲記録", f"{total_records} 本", delta=f"今月 +{monthly_records}")
+            render_stat_card(
+                "試飲記録",
+                f"{total_records} 本",
+                delta=f"+{monthly_records} 今月" if monthly_records > 0 else None,
+                icon="🍶",
+            )
 
         with col2:
             favorites = stats.get("favorites_count", 0)
-            st.metric("お気に入り", f"{favorites} 本")
+            render_stat_card("お気に入り", f"{favorites} 本", icon="❤️")
 
         with col3:
             breweries_explored = stats.get("breweries_explored", 0)
-            st.metric("探索した蔵", f"{breweries_explored} 軒")
+            render_stat_card("探索した蔵", f"{breweries_explored} 軒", icon="🏭")
 
         with col4:
             avg_rating = stats.get("average_rating", 0.0)
-            st.metric("平均評価", f"{avg_rating:.1f} ⭐")
+            render_stat_card("平均評価", f"{avg_rating:.1f}", icon="⭐")
 
     except (BackendError, Exception):
         with col1:
-            st.metric("試飲記録", "0 本", delta="今月 +0")
+            render_stat_card("試飲記録", "0 本", icon="🍶")
         with col2:
-            st.metric("お気に入り", "0 本")
+            render_stat_card("お気に入り", "0 本", icon="❤️")
         with col3:
-            st.metric("探索した蔵", "0 軒")
+            render_stat_card("探索した蔵", "0 軒", icon="🏭")
         with col4:
-            st.metric("平均評価", "0.0 ⭐")
+            render_stat_card("平均評価", "0.0", icon="⭐")
 
     st.markdown("---")
 
@@ -302,6 +323,14 @@ def main():
                 st.error(f"❌ エラー: {str(e)}")
             except Exception as e:
                 st.error(f"❌ 予期しないエラーが発生しました: {str(e)}")
+
+    st.markdown("---")
+
+    # Achievements section
+    st.markdown("### 🏆 実績とバッジ")
+
+    user_id = SessionManager.get_user_id()
+    render_achievements_panel(user_id)
 
     st.markdown("---")
 

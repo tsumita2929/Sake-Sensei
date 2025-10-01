@@ -1,5 +1,61 @@
 # Sake Sensei - Implementation Rules
 
+## 🔰 **MANDATORY: Amazon Bedrock AgentCore First Principle**
+
+**⚠️ 最重要実装原則: すべてのAI機能実装において、Amazon Bedrock AgentCoreの利用可能性を必ず最初に確認し、優先的に使用すること**
+
+### BedrockAgentCore優先順位
+
+1. **最優先**: Amazon Bedrock AgentCore の既存機能を確認
+   - Bedrock Agent (Memory, Tools, Knowledge Bases)
+   - AWS CLI (`aws bedrock-agent`, `aws bedrock-agent-runtime`)
+   - CloudFormation/CDKリソース
+   - boto3 SDK
+
+2. **代替手段**: AgentCoreで実装できない場合のみ、以下を検討
+   - DynamoDB + Lambda による自作実装
+   - サードパーティライブラリ
+
+3. **実装前チェックリスト**:
+   - [ ] AWS CLIで該当機能の存在を確認 (`aws bedrock-agent help`)
+   - [ ] CloudFormation/CDKでのリソース定義方法を確認
+   - [ ] boto3 APIドキュメントを確認
+   - [ ] AgentCoreで実装できない場合のみ、代替手段を検討
+
+### BedrockAgentCore実装例
+
+**✅ 正しい実装 (AgentCore優先)**:
+```python
+# Memory機能: Bedrock Agent Memory を使用
+aws bedrock-agent update-agent \
+  --agent-id AGENT_ID \
+  --memory-configuration '{
+    "enabledMemoryTypes": ["SESSION_SUMMARY"],
+    "sessionSummaryConfiguration": {"maxRecentSessions": 5},
+    "storageDays": 30
+  }'
+```
+
+**❌ 誤った実装 (AgentCore確認なし)**:
+```python
+# 独自DynamoDBテーブルでMemory実装 (AgentCore確認前)
+dynamodb.create_table(TableName='CustomMemory', ...)
+```
+
+### 実装時の判断フロー
+
+```
+新機能実装が必要
+    ↓
+AWS CLI/boto3 で BedrockAgentCore を確認
+    ↓
+    ├─ 利用可能 → AgentCore APIを使用 ✅
+    │   └─ CloudFormation/CDK で定義
+    │
+    └─ 利用不可 → 代替実装を検討
+        └─ ドキュメントに理由を記載
+```
+
 ## 📋 Implementation Process (AI-Driven)
 
 ### 実装フロー
@@ -142,6 +198,62 @@ uv run ruff check --fix . # Auto-fix issues
 - **Model**: Claude Sonnet 4.5 via Amazon Bedrock
 - **Services**: Runtime, Gateway (MCP), Memory, Identity, Observability
 
+### ⚠️ MANDATORY: AgentCore Integration Policy
+
+**ALL AI services in this project MUST use Amazon Bedrock AgentCore.**
+
+#### Required Integration Approach
+
+1. **Primary Method (Recommended)**: **AgentCore Gateway (MCP)**
+   - All Lambda functions should be exposed as MCP tools via AgentCore Gateway
+   - Gateway provides unified authentication, authorization, and observability
+   - Enables seamless tool composition and agent orchestration
+
+2. **Temporary Fallback (During Setup)**: **Direct Lambda Invocation**
+   - Used ONLY when AgentCore Gateway is not yet configured
+   - `backend_helper.py` automatically falls back to direct Lambda calls
+   - Should be migrated to Gateway as soon as possible
+
+#### Implementation Status
+
+- ✅ **AI Chat (Bedrock Converse API)**: Using Claude Sonnet 4.5 via Bedrock Runtime
+- ⚠️ **Backend Lambda Tools**: Currently using direct Lambda invocation (fallback mode)
+- 🚧 **AgentCore Gateway**: Pending setup (see `scripts/agentcore/create_gateway.py`)
+
+#### Migration Path to Full AgentCore Integration
+
+1. **Create AgentCore Gateway**:
+   ```bash
+   # Set required environment variables in .env
+   export GATEWAY_ROLE_ARN=arn:aws:iam::ACCOUNT:role/AgentCoreGatewayRole
+
+   # Run gateway creation script
+   uv run python scripts/agentcore/create_gateway.py
+   ```
+
+2. **Register Lambda Functions as MCP Tools**:
+   ```bash
+   uv run python scripts/agentcore/add_gateway_targets.py
+   ```
+
+3. **Update SSM Parameters** with Gateway URL:
+   ```bash
+   aws ssm put-parameter \
+     --name /copilot/applications/sakesensei/environments/dev/secrets/AGENTCORE_GATEWAY_URL \
+     --value "https://gateway.bedrock.amazonaws.com/gateway/GATEWAY_ID" \
+     --type String \
+     --overwrite
+   ```
+
+4. **Deploy and Test**: Backend automatically switches to Gateway mode when URL is configured
+
+#### Code Guidelines
+
+- **New Features**: MUST use AgentCore Gateway from the start
+- **AI Services**: MUST use Bedrock Runtime (Claude Sonnet 4.5)
+- **No Direct Model Calls**: Always use Bedrock Runtime, never call model APIs directly
+- **Tool Design**: Design Lambda functions with MCP tool interface in mind
+
 ### Backend
 
 - **Lambda Functions**: Recommendation, Preference, Tasting, Brewery, Image Recognition
@@ -159,9 +271,10 @@ uv run ruff check --fix . # Auto-fix issues
   - Lower latency for North American users
   - Cost-effective pricing tier
 - **Configuration**:
-  - Default region is set in `infrastructure/app.py`
-  - All environment variables in `.env.example` use `us-west-2`
-  - To change region, update `AWS_REGION` environment variable
+  - **ALL region settings are in `.env` file**
+  - Default: `AWS_REGION=us-west-2` in `.env.example`
+  - To change region: Update `AWS_REGION` in `.env` and re-deploy
+  - **NEVER hardcode region names in source code**
 
 **Supported Services in us-west-2:**
 - ✅ Amazon Bedrock (Claude 4.5 Sonnet)
@@ -170,6 +283,13 @@ uv run ruff check --fix . # Auto-fix issues
 - ✅ Amazon Cognito
 - ✅ AWS Lambda
 - ✅ Amazon ECS Fargate
+
+**Region Change Procedure:**
+1. Update `AWS_REGION` in `.env`
+2. Verify Bedrock model availability in new region
+3. Run `uv run cdk destroy --all` (if previously deployed)
+4. Run `uv run cdk deploy --all` with new region
+5. Update all AgentCore resources with new region endpoints
 
 ### Directory Structure
 
@@ -312,6 +432,110 @@ SakeSensei/
 - **YAML**: 2 spaces indentation, kebab-case keys
 - **JSON**: 2 spaces indentation
 
+## Environment Configuration
+
+### ⚠️ MANDATORY: All Environment-Specific Settings in .env
+
+**CRITICAL RULE**: All environment-specific configurations MUST be defined in the `.env` file. Never hardcode region names, endpoints, or account-specific values in source code.
+
+#### Required Setup
+
+1. **Copy `.env.example` to `.env`**:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Configure all required variables** in `.env`:
+   ```bash
+   # AWS Configuration
+   AWS_REGION=us-west-2                    # Required: Deployment region
+   AWS_ACCOUNT_ID=123456789012             # Required: Your AWS account ID
+
+   # Cognito (after CDK deployment)
+   COGNITO_USER_POOL_ID=us-west-2_XXXXX    # Required
+   COGNITO_CLIENT_ID=your-client-id        # Required
+
+   # AgentCore (after setup scripts)
+   AGENTCORE_GATEWAY_ID=your-gateway-id    # Required
+   AGENTCORE_GATEWAY_URL=https://...       # Required
+   AGENTCORE_MEMORY_ID=your-memory-id      # Required
+
+   # Lambda ARNs (after CDK deployment)
+   LAMBDA_RECOMMENDATION_ARN=arn:aws:lambda:...
+   LAMBDA_PREFERENCE_ARN=arn:aws:lambda:...
+   # ... (see .env.example for full list)
+   ```
+
+3. **Never commit `.env` file** (already in `.gitignore`)
+
+#### Configuration Categories
+
+| Category | Variables | Source |
+|----------|-----------|--------|
+| **AWS Core** | `AWS_REGION`, `AWS_ACCOUNT_ID` | Manual setup |
+| **Cognito** | `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` | From CDK outputs |
+| **AgentCore** | `AGENTCORE_GATEWAY_ID`, `AGENTCORE_MEMORY_ID` | From setup scripts |
+| **Lambda ARNs** | `LAMBDA_*_ARN` (5 functions) | From CDK outputs |
+| **DynamoDB** | `DYNAMODB_*_TABLE` (4 tables) | From CDK outputs |
+| **Features** | `FEATURE_*` flags | Optional configuration |
+
+#### Region Configuration
+
+**Default Region**: `us-west-2` (Oregon)
+
+To deploy to a different region:
+1. Update `AWS_REGION` in `.env`
+2. Verify Bedrock Claude 4.5 Sonnet availability in target region
+3. Update all region-specific URLs and endpoints
+4. Re-deploy infrastructure with new region
+
+**Supported Services by Region** (verify before changing):
+- ✅ us-west-2: All services supported (recommended)
+- ⚠️ Other regions: Check Bedrock model availability
+
+#### Loading Configuration
+
+All configuration is loaded through `streamlit_app/utils/config.py`:
+
+```python
+from streamlit_app.utils.config import config
+
+# Access configuration
+region = config.AWS_REGION
+cognito_pool = config.COGNITO_USER_POOL_ID
+gateway_url = config.AGENTCORE_GATEWAY_URL
+```
+
+**Configuration Validation**: On app startup, `config.validate()` checks for required variables.
+
+#### Environment-Specific Files
+
+| File | Purpose | Contains |
+|------|---------|----------|
+| `.env` | **Local development** | Your actual values (DO NOT COMMIT) |
+| `.env.example` | **Template** | Example values with documentation |
+| `copilot/*/manifest.yml` | **ECS deployment** | References to SSM parameters |
+| `infrastructure/app.py` | **CDK deployment** | Reads from environment or uses defaults |
+
+#### Deployment Checklist
+
+- [ ] `.env` file created with all required variables
+- [ ] CDK deployed and outputs recorded in `.env`
+- [ ] AgentCore resources created and IDs added to `.env`
+- [ ] SSM parameters configured for ECS (see `scripts/deploy/setup_ssm_parameters.sh`)
+- [ ] No hardcoded regions, account IDs, or endpoints in source code
+
+#### Troubleshooting
+
+**Issue**: "Missing required configuration"
+- **Solution**: Check `.env` file exists and contains all variables from `.env.example`
+
+**Issue**: "Region mismatch errors"
+- **Solution**: Ensure `AWS_REGION` matches in `.env`, CDK deployment, and all AWS resources
+
+**Issue**: "AgentCore gateway not found"
+- **Solution**: Run setup scripts and update `AGENTCORE_GATEWAY_ID` in `.env`
+
 ## Development Guidelines
 
 ### Error Handling
@@ -330,10 +554,28 @@ SakeSensei/
 
 ### Environment Variables
 
-- Use `.env` for local development (never commit to git)
-- Use AWS Systems Manager Parameter Store or Secrets Manager for production
-- Inject into ECS container via Copilot manifest
-- Required variables: `AWS_REGION`, `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `AGENTCORE_RUNTIME_URL`
+**⚠️ CRITICAL: All environment-specific configuration MUST be in `.env` file**
+
+- **Local Development**: Use `.env` file (never commit to git)
+- **Production/ECS**: Use AWS Systems Manager Parameter Store
+- **CI/CD**: Use GitHub Secrets and inject via workflows
+- **Configuration Loading**: All code uses `streamlit_app/utils/config.py`
+
+**Required Variables** (see `.env.example` for complete list):
+- `AWS_REGION` - Deployment region
+- `AWS_ACCOUNT_ID` - Your AWS account
+- `COGNITO_USER_POOL_ID` - After CDK deployment
+- `COGNITO_CLIENT_ID` - After CDK deployment
+- `AGENTCORE_GATEWAY_ID` - After gateway creation
+- `AGENTCORE_GATEWAY_URL` - Gateway endpoint
+- `AGENTCORE_MEMORY_ID` - After memory creation
+- `LAMBDA_*_ARN` - All 5 Lambda function ARNs
+
+**Production Deployment**:
+1. Store sensitive values in AWS Secrets Manager
+2. Use SSM Parameter Store for non-sensitive config
+3. Reference in `copilot/streamlit-app/manifest.yml`
+4. See `scripts/deploy/setup_ssm_parameters.sh`
 
 ## Testing
 

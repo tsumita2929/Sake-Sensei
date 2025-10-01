@@ -40,6 +40,11 @@ env/
 .uv/
 uv.lock
 
+# Temporary JSON configuration files (cleanup)
+*_policy_update.json
+*_gateway_*.json
+lambda_function_urls.json
+
 # IDE - VSCode
 .vscode/
 *.code-workspace
@@ -166,6 +171,18 @@ docker-compose.override.yml
 # Build artifacts
 *.zip
 function.zip
+
+# Lambda deployment packages
+**/package/
+**/lambda_layer/
+backend/lambdas/*/function.zip
+backend/lambdas/*/package/
+
+# Documentation - Generated/Temporary
+CLEANUP_SUMMARY.md
+GITIGNORE_UPDATE.md
+**/AGENTCORE_INTEGRATION_SUMMARY.md
+streamlit_app/VERSION
 
 # Sample
 amazon-bedrock-agentcore-samples/

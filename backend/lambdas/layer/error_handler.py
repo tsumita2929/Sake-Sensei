@@ -12,15 +12,20 @@ from typing import Any, TypeVar, cast
 from botocore.exceptions import ClientError
 from pydantic import ValidationError
 
-from backend.lambdas.layer.logger import get_logger
-from backend.lambdas.layer.response import error_response, internal_error_response
+# Lambda Layer imports
+try:
+    from logger import get_logger
+    from response import error_response, internal_error_response
+except ImportError:
+    from backend.lambdas.layer.logger import get_logger
+    from backend.lambdas.layer.response import error_response, internal_error_response
 
 F = TypeVar("F", bound=Callable[..., Any])
 
 logger = get_logger(__name__)
 
 
-def handle_errors[F: Callable[..., Any]](func: F) -> F:
+def handle_errors(func: F) -> F:
     """Decorator to handle errors in Lambda functions.
 
     Catches common exceptions and returns standardized error responses.
@@ -115,7 +120,7 @@ def handle_errors[F: Callable[..., Any]](func: F) -> F:
     return cast(F, wrapper)
 
 
-def handle_errors_async[F: Callable[..., Any]](func: F) -> F:
+def handle_errors_async(func: F) -> F:
     """Decorator to handle errors in async Lambda functions.
 
     Same as handle_errors but for async functions.

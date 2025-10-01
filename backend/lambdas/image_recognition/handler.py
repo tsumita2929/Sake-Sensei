@@ -11,9 +11,15 @@ from typing import Any
 
 import boto3
 
-from backend.lambdas.layer.error_handler import handle_errors
-from backend.lambdas.layer.logger import get_logger
-from backend.lambdas.layer.response import bad_request_response, success_response
+# Lambda Layer imports
+try:
+    from error_handler import handle_errors
+    from logger import get_logger
+    from response import bad_request_response, success_response
+except ImportError:
+    from backend.lambdas.layer.error_handler import handle_errors
+    from backend.lambdas.layer.logger import get_logger
+    from backend.lambdas.layer.response import bad_request_response, success_response
 
 logger = get_logger(__name__)
 
@@ -22,7 +28,8 @@ s3_client = boto3.client("s3")
 bedrock_runtime = boto3.client("bedrock-runtime", region_name=os.getenv("AWS_REGION", "us-west-2"))
 
 # Bedrock model configuration
-BEDROCK_MODEL_ID = "anthropic.claude-sonnet-4-5-v2:0"  # Claude 4.5 Sonnet
+# Use inference profile for on-demand throughput
+BEDROCK_MODEL_ID = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"  # Claude 4.5 Sonnet (US region profile)
 MAX_TOKENS = 2000
 TEMPERATURE = 0.3  # Lower temperature for more consistent extraction
 
@@ -109,7 +116,11 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # Get authenticated user for logging
     user_id = event.get("requestContext", {}).get("authorizer", {}).get("user_id", "anonymous")
 
+    # Debug logging
     logger.info("Processing image recognition request", user_id=user_id)
+    logger.debug("Event structure", event_keys=list(event.keys()))
+    logger.debug("Body keys", body_keys=list(body.keys()))
+    logger.debug("Body sample", body_sample={k: str(v)[:100] if k == "image_base64" else v for k, v in body.items()})
 
     # Get image data
     image_base64 = None
@@ -118,7 +129,8 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if "image_base64" in body:
         # Direct base64 image
         image_base64 = body["image_base64"]
-        content_type = body.get("content_type", "image/jpeg")
+        # Support both 'content_type' and 'media_type' field names
+        content_type = body.get("content_type") or body.get("media_type", "image/jpeg")
     elif "image_s3_key" in body:
         # Load image from S3
         s3_key = body["image_s3_key"]

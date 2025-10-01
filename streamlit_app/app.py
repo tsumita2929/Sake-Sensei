@@ -8,6 +8,7 @@ import streamlit as st
 from components.agent_client import render_agent_chat
 from components.auth import CognitoAuth
 from utils.session import SessionManager
+from utils.ui_components import load_custom_css, render_feature_card, render_stat_card
 
 # Configure page
 st.set_page_config(
@@ -18,41 +19,8 @@ st.set_page_config(
     menu_items={"About": "# Sake Sensei\nAI-powered sake recommendation system"},
 )
 
-# Custom CSS
-st.markdown(
-    """
-<style>
-    .main-header {
-        font-size: 3rem;
-        font-weight: bold;
-        color: #2E4057;
-        text-align: center;
-        margin-bottom: 1rem;
-    }
-    .sub-header {
-        font-size: 1.2rem;
-        color: #5C6B73;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .sake-card {
-        background-color: #f8f9fa;
-        padding: 1.5rem;
-        border-radius: 10px;
-        border-left: 5px solid #C9ADA7;
-        margin-bottom: 1rem;
-    }
-    .info-box {
-        background-color: #e7f3ff;
-        padding: 1rem;
-        border-radius: 5px;
-        border-left: 4px solid #0066cc;
-        margin: 1rem 0;
-    }
-</style>
-""",
-    unsafe_allow_html=True,
-)
+# Load custom CSS
+load_custom_css()
 
 
 def main():
@@ -350,43 +318,53 @@ def show_main_app():
     左のサイドバーから各機能をご利用いただけます：
     """)
 
-    col1, col2 = st.columns(2)
+    # Feature cards
+    st.markdown("### ✨ 機能紹介")
+
+    col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.markdown("""
-        #### 🎯 おすすめ機能
-
-        - **Preference Survey** - あなたの好みを教えてください
-        - **Recommendations** - AI が日本酒を提案します
-        - **Rating** - 飲んだ日本酒を評価しましょう
-        """)
+        render_feature_card(
+            title="プリファレンス調査",
+            description="あなたの好みを詳しく教えてください。AI がより精度の高いおすすめを提案します。",
+            icon="🎯",
+            link="pages/1_🎯_Preference_Survey.py",
+        )
 
     with col2:
-        st.markdown("""
-        #### 📸 便利機能
+        render_feature_card(
+            title="AI おすすめ",
+            description="最先端の AI があなたにぴったりの日本酒を提案します。",
+            icon="🤖",
+            link="pages/2_🤖_AI_Recommendations.py",
+        )
 
-        - **Image Recognition** - ラベル写真から情報を取得
-        - **History** - あなたのテイスティング履歴
-        """)
+    with col3:
+        render_feature_card(
+            title="テイスティング記録",
+            description="飲んだ日本酒を記録して、あなただけの酒ノートを作成。",
+            icon="⭐",
+            link="pages/3_⭐_Rating.py",
+        )
 
     st.markdown("---")
 
-    # Quick stats (placeholder)
+    # Quick stats
     st.markdown("### 📊 あなたの統計")
 
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.metric("試飲記録", "0 本")
+        render_stat_card("試飲記録", "0 本", delta=None, icon="🍶")
 
     with col2:
-        st.metric("お気に入り", "0 本")
+        render_stat_card("お気に入り", "0 本", delta=None, icon="❤️")
 
     with col3:
-        st.metric("探索した蔵", "0 軒")
+        render_stat_card("探索した蔵", "0 軒", delta=None, icon="🏭")
 
     with col4:
-        st.metric("おすすめ取得", "0 回")
+        render_stat_card("おすすめ取得", "0 回", delta=None, icon="🎁")
 
     st.markdown("---")
 

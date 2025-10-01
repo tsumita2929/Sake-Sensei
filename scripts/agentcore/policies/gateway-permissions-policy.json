@@ -7,7 +7,7 @@
         "lambda:InvokeFunction"
       ],
       "Resource": [
-        "arn:aws:lambda:us-west-2:093325005283:function:SakeSensei-*"
+        "arn:aws:lambda:us-west-2:047786098634:function:SakeSensei-*"
       ]
     },
     {

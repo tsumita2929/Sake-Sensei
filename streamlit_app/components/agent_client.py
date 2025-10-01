@@ -9,24 +9,31 @@ from typing import Any
 
 import streamlit as st
 from components.agentcore_runtime_client import AgentCoreRuntimeClient
+from components.bedrock_agent_client import BedrockAgentClient
 from components.bedrock_client import BedrockClient
 from utils.config import config
 from utils.session import SessionManager
 
 
 class AgentCoreClient:
-    """Client for AI agent communication via AgentCore Runtime."""
+    """Client for AI agent communication via AgentCore Runtime or Bedrock Agent."""
 
     def __init__(self) -> None:
         """Initialize AI client."""
-        # Use AgentCore Runtime if configured, fallback to Bedrock direct
+        # Priority: AgentCore Runtime > Bedrock Agent > Bedrock Direct
         self.runtime_url = config.AGENTCORE_RUNTIME_URL
+        self.agent_id = config.AGENTCORE_AGENT_ID
         self.use_runtime = bool(self.runtime_url)
+        self.use_bedrock_agent = bool(self.agent_id) and not self.use_runtime
 
         if self.use_runtime:
+            # Use AgentCore Runtime (preferred)
             self.runtime_client = AgentCoreRuntimeClient()
+        elif self.use_bedrock_agent:
+            # Use Bedrock Agent (fallback 1)
+            self.bedrock_agent_client = BedrockAgentClient()
         else:
-            # Fallback to direct Bedrock (legacy)
+            # Use direct Bedrock (fallback 2 - legacy)
             self.bedrock_client = BedrockClient()
 
     def invoke_agent(
@@ -47,9 +54,9 @@ class AgentCoreClient:
             Streaming response chunks
         """
         try:
-            # Use AgentCore Runtime if configured
+            # Priority: AgentCore Runtime > Bedrock Agent > Bedrock Direct
             if self.use_runtime:
-                # Build context with user preferences and chat history
+                # Use AgentCore Runtime (preferred)
                 user_context = context or {}
 
                 # Add user preferences
@@ -67,8 +74,14 @@ class AgentCoreClient:
                     prompt=prompt, session_id=session_id, context=user_context
                 )
 
+            elif self.use_bedrock_agent:
+                # Use Bedrock Agent (fallback 1)
+                yield from self.bedrock_agent_client.invoke_agent_streaming(
+                    prompt=prompt, session_id=session_id, context=context
+                )
+
             else:
-                # Fallback to direct Bedrock
+                # Use direct Bedrock (fallback 2 - legacy)
                 chat_history = SessionManager.get_chat_history()
 
                 user_context = {}

@@ -41,16 +41,28 @@ uv sync --all-extras
 
 4. **Set up environment variables**:
 
+⚠️ **CRITICAL**: All environment-specific configuration MUST be in `.env` file.
+
 ```bash
 # Copy example env file
 cp .env.example .env
 
-# Edit .env with your AWS credentials
-# COGNITO_USER_POOL_ID=...
-# COGNITO_CLIENT_ID=...
-# APPSYNC_API_URL=...
+# Edit .env with your configuration
+# See .env.example for complete list of required variables
+
+# Required variables (update after deployment):
+# AWS_REGION=us-west-2
+# AWS_ACCOUNT_ID=your-account-id
+# COGNITO_USER_POOL_ID=us-west-2_XXXXX
+# COGNITO_CLIENT_ID=your-client-id
+# AGENTCORE_GATEWAY_ID=your-gateway-id
+# AGENTCORE_GATEWAY_URL=https://...
+# AGENTCORE_MEMORY_ID=your-memory-id
+# LAMBDA_*_ARN=arn:aws:lambda:...
 # etc.
 ```
+
+**NEVER commit `.env` file** (already in `.gitignore`)
 
 5. **Run the application**:
 

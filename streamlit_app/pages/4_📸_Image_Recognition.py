@@ -18,16 +18,24 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from components.auth import show_login_dialog
 from utils.backend_helper import BackendError, backend_client
 from utils.config import config
+from utils.gamification import update_user_progress
 from utils.session import SessionManager
+from utils.ui_components import load_custom_css
 from utils.validation import validate_image_file
 
 st.set_page_config(page_title="Image Recognition - Sake Sensei", page_icon="📸", layout="wide")
 
+# Load custom CSS
+load_custom_css()
+
 
 def main():
     """Main page function."""
-    st.title("📸 ラベル認識")
-    st.markdown("日本酒のラベル写真をアップロードして、銘柄情報を取得しましょう")
+    st.markdown('<div class="main-header">📸 ラベル認識</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="sub-header">日本酒のラベル写真をアップロードして、銘柄情報を取得しましょう</div>',
+        unsafe_allow_html=True,
+    )
 
     # Check authentication
     if not SessionManager.is_authenticated():
@@ -108,9 +116,51 @@ def main():
                             # Call image recognition Lambda via AgentCore
                             result = backend_client.recognize_sake_label(img_base64, media_type)
 
-                            if result and result.get("sake_info"):
-                                sake_info = result["sake_info"]
-                                confidence = result.get("confidence", 0.0)
+                            if result and result.get("data"):
+                                sake_info = result["data"]
+                                # confidence is inside data object as string (high/medium/low)
+                                confidence_str = sake_info.get("confidence", "low")
+                                # Convert to numeric for display
+                                confidence_map = {"high": 0.9, "medium": 0.7, "low": 0.5}
+                                confidence = confidence_map.get(confidence_str, 0.5)
+
+                                # Map Lambda response fields to frontend expected fields
+                                category_display_map = {
+                                    "junmai_daiginjo": "純米大吟醸",
+                                    "daiginjo": "大吟醸",
+                                    "junmai_ginjo": "純米吟醸",
+                                    "ginjo": "吟醸",
+                                    "junmai": "純米酒",
+                                    "honjozo": "本醸造",
+                                    "futsushu": "普通酒",
+                                    "koshu": "古酒",
+                                    "other": "その他",
+                                }
+
+                                # Add display name for category
+                                if sake_info.get("category"):
+                                    sake_info["sake_type"] = category_display_map.get(
+                                        sake_info["category"], sake_info["category"]
+                                    )
+
+                                # Map polishing_ratio to rice_polish_ratio
+                                if sake_info.get("polishing_ratio"):
+                                    sake_info["rice_polish_ratio"] = sake_info["polishing_ratio"]
+
+                                # Store recognized sake info in session for tasting record
+                                st.session_state["recognized_sake_info"] = {
+                                    "sake_name": sake_info.get("sake_name", ""),
+                                    "brewery_name": sake_info.get("brewery_name", ""),
+                                    "sake_type": sake_info.get("sake_type", ""),
+                                    "rice_polish_ratio": sake_info.get("rice_polish_ratio"),
+                                    "alcohol_content": sake_info.get("alcohol_content"),
+                                    "ingredients": sake_info.get("ingredients", ""),
+                                    "prefecture": sake_info.get("prefecture", ""),
+                                }
+
+                                # Update gamification progress
+                                user_id = SessionManager.get_user_id()
+                                update_user_progress(user_id, "image_recognition")
 
                                 st.markdown("#### 認識された情報")
 
@@ -165,17 +215,30 @@ def main():
                                 st.markdown("---")
 
                                 # Action buttons
-                                col1, col2 = st.columns(2)
+                                st.markdown("### 🎯 次のステップ")
+
+                                col1, col2, col3 = st.columns(3)
 
                                 with col1:
                                     if st.button(
-                                        "📝 テイスティング記録へ", use_container_width=True
+                                        "📝 テイスティング記録へ",
+                                        use_container_width=True,
+                                        type="primary",
                                     ):
-                                        st.switch_page("pages/3_⭐_Rating.py")
+                                        # Ensure data is in session before switching
+                                        if "recognized_sake_info" in st.session_state:
+                                            st.session_state["from_image_recognition"] = True
+                                            st.switch_page("pages/3_⭐_Rating.py")
+                                        else:
+                                            st.error("認識情報の保存に失敗しました")
 
                                 with col2:
                                     if st.button("💾 お気に入りに追加", use_container_width=True):
-                                        st.toast("お気に入りに追加しました！")
+                                        st.toast("❤️ お気に入りに追加しました！")
+
+                                with col3:
+                                    if st.button("🔄 別の写真を認識", use_container_width=True):
+                                        st.rerun()
                             else:
                                 st.error("❌ 画像から日本酒の情報を認識できませんでした")
                                 st.info(

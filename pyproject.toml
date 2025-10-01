@@ -26,6 +26,8 @@ dependencies = [
     "orjson>=3.10.0",
     "email-validator>=2.0.0",
     "pyjwt[crypto]>=2.8.0",
+    "aws-cdk-lib>=2.218.0",
+    "constructs>=10.4.2",
 ]
 
 [project.optional-dependencies]
@@ -80,6 +82,8 @@ ignore = [
     "B008",  # do not perform function calls in argument defaults
     "W191",  # indentation contains tabs
     "B904",  # Allow raising exceptions without from e
+    "SIM116",  # if-else-block-instead-of-dict-lookup (keep for readability)
+    "UP047",  # non-pep695-generic-function (Python 3.12 compatibility)
 ]
 
 [tool.ruff.lint.per-file-ignores]

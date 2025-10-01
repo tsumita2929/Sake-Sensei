@@ -39,10 +39,10 @@ def create_memory():
     print(f"Region: {AWS_REGION}")
     print(f"Event expiry: {EVENT_EXPIRY_DAYS} days")
 
-    # Initialize Bedrock AgentCore Control client
+    # Initialize Bedrock Agent client
     try:
         client = boto3.client(
-            "bedrock-agentcore-control",
+            "bedrock-agent",
             region_name=AWS_REGION,
         )
     except Exception as e:

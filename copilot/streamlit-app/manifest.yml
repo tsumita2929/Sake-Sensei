@@ -48,6 +48,8 @@ variables:
   FEATURE_EXPORT_HISTORY: false
   COGNITO_USER_POOL_ID: us-west-2_jF4QBUGBd
   COGNITO_CLIENT_ID: 74fvahd8h9gfvb5pfn0mchm0uk
+  AGENTCORE_GATEWAY_URL: https://sakesensei-gateway-bvapumjpfk.gateway.bedrock-agentcore.us-west-2.amazonaws.com/mcp
+  AGENTCORE_GATEWAY_ID: sakesensei-gateway-bvapumjpfk
   LAMBDA_RECOMMENDATION_ARN: arn:aws:lambda:us-west-2:047786098634:function:SakeSensei-Recommendation
   LAMBDA_PREFERENCE_ARN: arn:aws:lambda:us-west-2:047786098634:function:SakeSensei-Preference
   LAMBDA_TASTING_ARN: arn:aws:lambda:us-west-2:047786098634:function:SakeSensei-Tasting

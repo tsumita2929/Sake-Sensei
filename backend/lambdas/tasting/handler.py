@@ -13,17 +13,34 @@ from typing import Any
 import boto3
 from pydantic import ValidationError
 
-from backend.lambdas.layer.error_handler import handle_errors
-from backend.lambdas.layer.logger import get_logger
-from backend.lambdas.layer.response import (
-    bad_request_response,
-    created_response,
-    no_content_response,
-    not_found_response,
-    success_response,
-    unauthorized_response,
-)
-from backend.models.tasting import TastingRecord
+# Lambda Layer imports
+try:
+    from error_handler import handle_errors
+    from logger import get_logger
+    from response import (
+        bad_request_response,
+        created_response,
+        no_content_response,
+        not_found_response,
+        success_response,
+        unauthorized_response,
+    )
+except ImportError:
+    from backend.lambdas.layer.error_handler import handle_errors
+    from backend.lambdas.layer.logger import get_logger
+    from backend.lambdas.layer.response import (
+        bad_request_response,
+        created_response,
+        no_content_response,
+        not_found_response,
+        success_response,
+        unauthorized_response,
+    )
+
+try:
+    from tasting import TastingRecord
+except ImportError:
+    from backend.models.tasting import TastingRecord
 
 logger = get_logger(__name__)
 

@@ -52,8 +52,9 @@ def create_gateway():
 
     # Initialize Bedrock AgentCore Control client
     try:
+        # Use bedrock-agent instead of bedrock-agentcore-control (service name)
         client = boto3.client(
-            "bedrock-agentcore-control",
+            "bedrock-agent",
             region_name=AWS_REGION,
         )
     except Exception as e:

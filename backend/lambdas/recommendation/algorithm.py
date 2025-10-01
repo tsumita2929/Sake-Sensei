@@ -29,7 +29,7 @@ class RecommendationEngine:
 
     def recommend(
         self,
-        user_id: str,
+        _user_id: str,  # Reserved for future use
         preferences: dict[str, Any],
         tasting_history: list[dict[str, Any]],
         limit: int = 10,

@@ -10,11 +10,18 @@ from typing import Any
 
 import boto3
 
-from backend.lambdas.layer.error_handler import handle_errors
-from backend.lambdas.layer.logger import get_logger
-from backend.lambdas.layer.response import bad_request_response, success_response
+# Lambda Layer imports (no 'backend.lambdas.layer' prefix in Lambda environment)
+try:
+    from error_handler import handle_errors
+    from logger import get_logger
+    from response import bad_request_response, success_response
+except ImportError:
+    # Fallback for local development
+    from backend.lambdas.layer.error_handler import handle_errors
+    from backend.lambdas.layer.logger import get_logger
+    from backend.lambdas.layer.response import bad_request_response, success_response
 
-from .algorithm import RecommendationEngine
+from algorithm import RecommendationEngine
 
 logger = get_logger(__name__)
 

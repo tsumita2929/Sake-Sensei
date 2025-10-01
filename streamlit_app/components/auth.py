@@ -26,7 +26,12 @@ class CognitoAuth:
         """
         Calculate SECRET_HASH if client secret is configured.
         Note: Our Streamlit client is configured as a public client (no secret).
+
+        Args:
+            username: Username for secret hash (not used for public clients)
         """
+        # Mark username as intentionally unused
+        _ = username
         # For public clients, return None
         return None
 

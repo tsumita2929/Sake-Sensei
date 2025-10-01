@@ -14,16 +14,24 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from components.auth import show_login_dialog
 from utils.backend_helper import BackendError, backend_client
+from utils.gamification import update_user_progress
 from utils.session import SessionManager
+from utils.ui_components import load_custom_css, render_progress_bar
 from utils.validation import sanitize_text_input, validate_preferences
 
 st.set_page_config(page_title="Preference Survey - Sake Sensei", page_icon="🎯", layout="wide")
 
+# Load custom CSS
+load_custom_css()
+
 
 def main():
     """Main page function."""
-    st.title("🎯 プリファレンス調査")
-    st.markdown("あなたの好みを教えてください。より精度の高いおすすめができます！")
+    st.markdown('<div class="main-header">🎯 プリファレンス調査</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="sub-header">あなたの好みを教えてください。より精度の高いおすすめができます！</div>',
+        unsafe_allow_html=True,
+    )
 
     # Check authentication
     if not SessionManager.is_authenticated():
@@ -33,9 +41,19 @@ def main():
 
     st.markdown("---")
 
-    # Survey form
+    # Progress indicator
+    current_prefs = SessionManager.get_preferences()
+    completion_status = calculate_completion_status(current_prefs)
+
+    st.markdown("### 📊 完了状況")
+    render_progress_bar(completion_status / 100, label="プリファレンス設定", show_percentage=True)
+
+    st.markdown("---")
+
+    # Survey form with enhanced UX
     with st.form("preference_survey"):
         st.markdown("### 📋 好みのアンケート")
+        st.info("💡 すべての項目に回答すると、より精度の高いおすすめが受けられます")
 
         # Sake type preference
         st.markdown("#### 1. 好きな日本酒のタイプ")
@@ -201,11 +219,16 @@ def main():
             # Store in session
             SessionManager.set_preferences(preferences)
 
+            # Update gamification progress
+            user_id = SessionManager.get_user_id()
+            update_user_progress(user_id, "preference_set")
+
             # Save to backend
             try:
                 with st.spinner("保存中..."):
                     success = backend_client.save_user_preferences(preferences)
                     if success:
+                        st.balloons()
                         st.success("✅ プリファレンスを保存しました！")
                         st.info(
                             "💡 「Recommendations」ページでおすすめの日本酒を見ることができます"
@@ -224,6 +247,44 @@ def main():
 
         with st.expander("設定内容を表示"):
             st.json(current_prefs)
+
+
+def calculate_completion_status(preferences: dict | None) -> float:
+    """
+    Calculate completion percentage of preferences.
+
+    Args:
+        preferences: User preferences dictionary
+
+    Returns:
+        Completion percentage (0-100)
+    """
+    if not preferences:
+        return 0.0
+
+    total_fields = 9  # Total number of preference categories
+    completed_fields = 0
+
+    if preferences.get("sake_types"):
+        completed_fields += 1
+    if preferences.get("sweetness"):
+        completed_fields += 1
+    if preferences.get("body"):
+        completed_fields += 1
+    if preferences.get("aroma_preference"):
+        completed_fields += 1
+    if preferences.get("drinking_scene"):
+        completed_fields += 1
+    if preferences.get("food_pairing"):
+        completed_fields += 1
+    if preferences.get("temperature_preference"):
+        completed_fields += 1
+    if preferences.get("price_range"):
+        completed_fields += 1
+    if preferences.get("experience_level"):
+        completed_fields += 1
+
+    return (completed_fields / total_fields) * 100
 
 
 if __name__ == "__main__":

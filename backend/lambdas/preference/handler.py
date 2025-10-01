@@ -11,15 +11,31 @@ from typing import Any
 import boto3
 from pydantic import ValidationError
 
-from backend.lambdas.layer.error_handler import handle_errors
-from backend.lambdas.layer.logger import get_logger
-from backend.lambdas.layer.response import (
-    bad_request_response,
-    not_found_response,
-    success_response,
-    unauthorized_response,
-)
-from backend.models.user import UserPreferences
+# Lambda Layer imports
+try:
+    from error_handler import handle_errors
+    from logger import get_logger
+    from response import (
+        bad_request_response,
+        not_found_response,
+        success_response,
+        unauthorized_response,
+    )
+except ImportError:
+    from backend.lambdas.layer.error_handler import handle_errors
+    from backend.lambdas.layer.logger import get_logger
+    from backend.lambdas.layer.response import (
+        bad_request_response,
+        not_found_response,
+        success_response,
+        unauthorized_response,
+    )
+
+# Models (need to be in Lambda package or layer)
+try:
+    from user import UserPreferences
+except ImportError:
+    from backend.models.user import UserPreferences
 
 logger = get_logger(__name__)
 

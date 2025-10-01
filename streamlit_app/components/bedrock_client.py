@@ -56,10 +56,10 @@ class BedrockClient:
         if chat_history:
             for msg in chat_history:
                 role = "assistant" if msg["role"] == "assistant" else "user"
-                messages.append({"role": role, "content": msg["content"]})
+                messages.append({"role": role, "content": [{"text": msg["content"]}]})
 
-        # Add current user message
-        messages.append({"role": "user", "content": prompt})
+        # Add current user message (content must be a list)
+        messages.append({"role": "user", "content": [{"text": prompt}]})
 
         return messages
 
@@ -95,6 +95,7 @@ class BedrockClient:
                 system_prompt += context_str
 
             # Invoke Bedrock with streaming
+            # Note: Sonnet 4.5 only allows temperature OR topP, not both
             response = self.client.converse_stream(
                 modelId=self.model_id,
                 messages=messages,
@@ -102,7 +103,6 @@ class BedrockClient:
                 inferenceConfig={
                     "maxTokens": 2048,
                     "temperature": 0.7,
-                    "topP": 0.9,
                 },
             )
 
