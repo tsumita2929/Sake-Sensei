@@ -250,7 +250,7 @@ def load_custom_css():
 
     /* ===== Sidebar ===== */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+        background: #FFFFFF;
         box-shadow: 2px 0 10px rgba(0,0,0,0.05);
     }
 
