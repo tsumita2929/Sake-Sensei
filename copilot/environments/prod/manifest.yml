@@ -1,0 +1,65 @@
+# The manifest for the "prod" environment.
+# Read the full specification for the "Environment" type at:
+# https://aws.github.io/copilot-cli/docs/manifest/environment/
+
+# Your environment name will be used in naming your resources like VPC, cluster, etc.
+name: prod
+type: Environment
+
+# Import your own VPC and subnets or configure how they should be created.
+# network:
+#   vpc:
+#     id:
+
+# Configure the load balancers in your environment, once created.
+# http:
+#   public:
+#   private:
+
+# Configure observability for your environment resources.
+observability:
+  container_insights: true
+
+# Production-specific configuration
+http:
+  public:
+    # Enable SSL/TLS termination at ALB
+    certificates:
+      # - arn:aws:acm:us-west-2:ACCOUNT_ID:certificate/CERTIFICATE_ID
+
+    # Security headers
+    security_groups:
+      ingress:
+        # Allow HTTPS from anywhere
+        - ip_protocol: tcp
+          ports: 443
+          cidr: 0.0.0.0/0
+        # Allow HTTP (will redirect to HTTPS)
+        - ip_protocol: tcp
+          ports: 80
+          cidr: 0.0.0.0/0
+
+# CloudWatch Logs retention for production
+# observability:
+#   container_insights: true
+#   cloudwatch_logs:
+#     retention: 30 # days
+
+# Production environment variables (non-sensitive)
+# For sensitive values, use AWS Systems Manager Parameter Store or Secrets Manager
+# and reference them in the service manifest
+
+# Tags applied to all resources in this environment
+tags:
+  Environment: production
+  Project: SakeSensei
+  ManagedBy: Copilot
+  CostCenter: sake-team
+
+# Production autoscaling configuration
+# This can be overridden in service manifest
+# cdn:
+#   enabled: true
+
+# Enable deletion protection for production
+# deletion_protection: true

@@ -1,0 +1,284 @@
+# Trivy configuration file for SakeSensei
+# Container and filesystem vulnerability scanning
+
+# Scan configuration
+scan:
+  # Scan type: image, fs, repo, vm, k8s, sbom
+  # Default is determined by the target
+  # type: image
+
+  # Security checks to enable
+  # Options: vuln, config, secret, license
+  security-checks:
+    - vuln
+    - config
+    - secret
+
+  # Skip specific checks or paths
+  skip-dirs:
+    - .venv
+    - node_modules
+    - htmlcov
+    - .pytest_cache
+    - .git
+    - infrastructure/cdk.out
+
+  skip-files:
+    - "**/*.md"
+    - "**/*.txt"
+    - "**/LICENSE"
+
+# Vulnerability scanning
+vulnerability:
+  # Vulnerability database type
+  # Options: vuln, all
+  type: all
+
+  # Severity levels to detect
+  # Options: UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL
+  severity:
+    - CRITICAL
+    - HIGH
+    - MEDIUM
+
+  # Ignore unfixed vulnerabilities
+  # If true, only report vulnerabilities that have fixes available
+  ignore-unfixed: false
+
+  # VEX (Vulnerability Exploitability eXchange) support
+  # vex: path/to/vex.json
+
+# Configuration scanning
+config:
+  # Configuration file types to scan
+  # Options: dockerfile, terraform, cloudformation, kubernetes, etc.
+  file-patterns:
+    - "**/*.dockerfile"
+    - "**/Dockerfile*"
+    - "**/*.tf"
+    - "**/*.yaml"
+    - "**/*.yml"
+
+  # Policy to use for config scanning
+  # policy: path/to/policy
+
+# Secret scanning
+secret:
+  # Enable secret scanning
+  enabled: true
+
+  # Custom secret patterns
+  # config: path/to/secret-config.yaml
+
+# License scanning
+license:
+  # Enable license scanning
+  enabled: true
+
+  # Forbidden licenses
+  # Any package with these licenses will be reported
+  forbidden:
+    # - GPL-3.0
+    # - AGPL-3.0
+
+  # Allowed licenses
+  # Only report packages not using these licenses
+  # allowed:
+  #   - MIT
+  #   - Apache-2.0
+  #   - BSD-3-Clause
+  #   - BSD-2-Clause
+  #   - ISC
+
+# Output configuration
+output:
+  # Output format
+  # Options: table, json, sarif, template, cyclonedx, spdx, github
+  format: table
+
+  # Output file path
+  # file: trivy-report.json
+
+  # Template for custom output (when format is template)
+  # template: path/to/template.tpl
+
+  # Severity list in output
+  # Only show vulnerabilities of these severities
+  severity:
+    - CRITICAL
+    - HIGH
+    - MEDIUM
+
+# Database configuration
+database:
+  # Skip database update
+  # Useful for offline environments or CI caching
+  skip-update: false
+
+  # Database repository
+  # repository: ghcr.io/aquasecurity/trivy-db
+
+  # Download DB from GitHub release
+  # download-db-only: false
+
+# Cache configuration
+cache:
+  # Cache directory
+  # dir: $HOME/.cache/trivy
+
+  # Clear cache before scanning
+  clear: false
+
+# Timeout settings
+timeout:
+  # Timeout for scanning
+  # Default: 5m
+  scan: 5m
+
+  # Timeout for server response
+  server: 1m
+
+# Ignore configuration
+ignore:
+  # Ignore file path
+  # File containing CVE IDs to ignore
+  file: .trivyignore
+
+  # Ignore policies
+  # policies:
+  #   - path/to/policy.rego
+
+# Exit code configuration
+exit:
+  # Exit code when vulnerabilities are found
+  # 0: Always exit with 0 (success)
+  # Non-zero: Exit with code based on findings
+  code: 0
+
+  # Exit code when specific severity found
+  # on-severity:
+  #   critical: 10
+  #   high: 5
+  #   medium: 1
+
+# Registry configuration
+registry:
+  # Docker registry credentials
+  # username: myuser
+  # password: mypassword
+
+  # AWS ECR authentication
+  # For AWS ECR, Trivy automatically uses AWS credentials
+  # aws:
+  #   region: us-west-2
+
+# Offline mode
+offline-scan: false
+
+# Compliance reporting
+# compliance:
+#   # Compliance report type
+#   # Options: docker-cis, k8s-cis, etc.
+#   spec: docker-cis
+
+# Filtering
+filter:
+  # Include only specific package types
+  # pkg-types:
+  #   - pip
+  #   - npm
+
+  # Exclude specific package types
+  # exclude-pkg-types:
+  #   - conda
+
+# Misconfiguration scanning
+misconfig:
+  # Severity for misconfigurations
+  severity:
+    - CRITICAL
+    - HIGH
+    - MEDIUM
+
+  # Custom policies directory
+  # policy: path/to/policies
+
+  # Include non-failures (info, warnings)
+  include-non-failures: false
+
+  # Helm values file (for Helm chart scanning)
+  # helm-values: values.yaml
+
+# SBOM (Software Bill of Materials)
+sbom:
+  # Enable SBOM generation
+  # enabled: true
+
+  # SBOM format
+  # Options: cyclonedx, spdx, spdx-json, github
+  # format: cyclonedx
+
+# Server mode configuration
+# server:
+#   # Server address
+#   listen: localhost:8080
+
+#   # Token for authentication
+#   token: mytoken
+
+# Client mode configuration
+# client:
+#   # Server address
+#   remote: http://localhost:8080
+
+#   # Token for authentication
+#   token: mytoken
+
+# Module configuration
+module:
+  # Directory to store modules
+  # dir: $HOME/.trivy/modules
+
+# Repository scanning
+# repository:
+#   # Branch to scan
+#   branch: main
+
+#   # Commit to scan
+#   commit: HEAD
+
+#   # Tag to scan
+#   tag: v1.0.0
+
+# Kubernetes scanning
+# kubernetes:
+#   # Kubernetes context
+#   context: default
+
+#   # Namespace
+#   namespace: default
+
+#   # Include kube-system namespace
+#   include-kube-system: false
+
+# Custom headers
+# custom-headers:
+#   - "X-Custom-Header: value"
+
+# Insecure registries
+# insecure: false
+
+# Skip TLS verification
+# skip-tls-verify: false
+
+# Parallel processing
+# parallel: 5
+
+# Quiet mode (suppress progress output)
+quiet: false
+
+# Debug mode
+debug: false
+
+# Trace mode (very verbose)
+trace: false

@@ -1,0 +1,178 @@
+# Sake Sensei - Additional IAM Permissions for Streamlit ECS Task
+# This CloudFormation template is automatically included by Copilot
+
+Parameters:
+  App:
+    Type: String
+    Description: Your application's name.
+  Env:
+    Type: String
+    Description: The environment name your service, job, or workflow is being deployed to.
+  Name:
+    Type: String
+    Description: The name of the service, job, or workflow being deployed.
+
+Resources:
+  # IAM Policy for Lambda Invocation
+  LambdaInvokePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: InvokeLambdaFunctions
+            Effect: Allow
+            Action:
+              - lambda:InvokeFunction
+              - lambda:InvokeAsync
+            Resource:
+              - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:sakesensei-*'
+
+  # IAM Policy for DynamoDB Access
+  DynamoDBAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DynamoDBReadWrite
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+              - dynamodb:Query
+              - dynamodb:Scan
+              - dynamodb:BatchGetItem
+              - dynamodb:BatchWriteItem
+            Resource:
+              - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SakeSensei-*'
+              - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SakeSensei-*/index/*'
+
+  # IAM Policy for S3 Access
+  S3AccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: S3ReadWrite
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:ListBucket
+            Resource:
+              - !Sub 'arn:aws:s3:::sakesensei-*'
+              - !Sub 'arn:aws:s3:::sakesensei-*/*'
+
+  # IAM Policy for Cognito Access
+  CognitoAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CognitoUserPoolAccess
+            Effect: Allow
+            Action:
+              - cognito-idp:AdminGetUser
+              - cognito-idp:AdminInitiateAuth
+              - cognito-idp:AdminRespondToAuthChallenge
+              - cognito-idp:GetUser
+              - cognito-idp:ListUsers
+            Resource:
+              - !Sub 'arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*'
+
+  # IAM Policy for Bedrock AgentCore Access
+  BedrockAgentCorePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: BedrockAgentCoreAccess
+            Effect: Allow
+            Action:
+              - bedrock:InvokeAgent
+              - bedrock:InvokeAgentRuntime
+              - bedrock-agent-runtime:*
+            Resource: '*'
+
+  # IAM Policy for CloudWatch Logs
+  CloudWatchLogsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CloudWatchLogs
+            Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - logs:DescribeLogStreams
+            Resource:
+              - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sakesensei/*'
+
+  # IAM Policy for Systems Manager Parameter Store (for secrets)
+  SSMParameterPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: SSMParameterAccess
+            Effect: Allow
+            Action:
+              - ssm:GetParameter
+              - ssm:GetParameters
+              - ssm:GetParametersByPath
+            Resource:
+              - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/copilot/${App}/${Env}/*'
+
+Outputs:
+  LambdaInvokePolicyArn:
+    Description: ARN of the Lambda invoke policy
+    Value: !Ref LambdaInvokePolicy
+    Export:
+      Name: !Sub ${App}-${Env}-${Name}-LambdaInvokePolicy
+
+  DynamoDBAccessPolicyArn:
+    Description: ARN of the DynamoDB access policy
+    Value: !Ref DynamoDBAccessPolicy
+    Export:
+      Name: !Sub ${App}-${Env}-${Name}-DynamoDBAccessPolicy
+
+  S3AccessPolicyArn:
+    Description: ARN of the S3 access policy
+    Value: !Ref S3AccessPolicy
+    Export:
+      Name: !Sub ${App}-${Env}-${Name}-S3AccessPolicy
+
+  CognitoAccessPolicyArn:
+    Description: ARN of the Cognito access policy
+    Value: !Ref CognitoAccessPolicy
+    Export:
+      Name: !Sub ${App}-${Env}-${Name}-CognitoAccessPolicy
+
+  BedrockAgentCorePolicyArn:
+    Description: ARN of the Bedrock AgentCore policy
+    Value: !Ref BedrockAgentCorePolicy
+    Export:
+      Name: !Sub ${App}-${Env}-${Name}-BedrockAgentCorePolicy
+
+  CloudWatchLogsPolicyArn:
+    Description: ARN of the CloudWatch Logs policy
+    Value: !Ref CloudWatchLogsPolicy
+    Export:
+      Name: !Sub ${App}-${Env}-${Name}-CloudWatchLogsPolicy
+
+  SSMParameterPolicyArn:
+    Description: ARN of the SSM Parameter policy
+    Value: !Ref SSMParameterPolicy
+    Export:
+      Name: !Sub ${App}-${Env}-${Name}-SSMParameterPolicy

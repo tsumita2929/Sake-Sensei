@@ -1,0 +1,232 @@
+[
+  {
+    "sake_id": "sake_001",
+    "name": "獺祭 純米大吟醸 磨き二割三分",
+    "brewery_id": "brewery_001",
+    "category": "純米大吟醸",
+    "price": 5500,
+    "alcohol_content": 16.0,
+    "characteristics": {
+      "sweetness": 3,
+      "acidity": 2,
+      "body": 2,
+      "aroma": "フルーティーで華やか。メロンや洋梨のような香り"
+    },
+    "pairings": [
+      "白身魚の刺身",
+      "貝類",
+      "淡白なチーズ"
+    ],
+    "description": "山口県の旭酒造が誇る代表作。精米歩合23%まで磨き上げた酒米を使用し、繊細で華やかな香りと透明感のある味わいが特徴です。",
+    "image_url": "https://example.com/images/dassai_23.jpg",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "sake_id": "sake_002",
+    "name": "久保田 萬寿",
+    "brewery_id": "brewery_002",
+    "category": "純米大吟醸",
+    "price": 4000,
+    "alcohol_content": 15.0,
+    "characteristics": {
+      "sweetness": 2,
+      "acidity": 2,
+      "body": 3,
+      "aroma": "穏やかで品のある香り。米の旨みと柔らかな吟醸香"
+    },
+    "pairings": [
+      "寿司",
+      "天ぷら",
+      "焼き鳥"
+    ],
+    "description": "新潟県を代表する朝日酒造の最高峰。柔らかく優雅な味わいと、深いコクが調和した逸品。冷やでも燗でも楽しめます。",
+    "image_url": "https://example.com/images/kubota_manju.jpg",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "sake_id": "sake_003",
+    "name": "八海山 純米大吟醸",
+    "brewery_id": "brewery_003",
+    "category": "純米大吟醸",
+    "price": 3800,
+    "alcohol_content": 15.5,
+    "characteristics": {
+      "sweetness": 2,
+      "acidity": 3,
+      "body": 2,
+      "aroma": "清涼感のある爽やかな香り"
+    },
+    "pairings": [
+      "刺身",
+      "冷奴",
+      "塩焼き魚"
+    ],
+    "description": "新潟県南魚沼の八海醸造による淡麗辛口の代表格。雪解け水のような清らかさと、キレの良い後味が特徴です。",
+    "image_url": "https://example.com/images/hakkaisan_junmai.jpg",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "sake_id": "sake_004",
+    "name": "十四代 本丸 秘伝玉返し",
+    "brewery_id": "brewery_004",
+    "category": "特別本醸造",
+    "price": 3200,
+    "alcohol_content": 15.0,
+    "characteristics": {
+      "sweetness": 4,
+      "acidity": 3,
+      "body": 3,
+      "aroma": "華やかで甘い果実香。リンゴやバナナのニュアンス"
+    },
+    "pairings": [
+      "鶏肉料理",
+      "白身魚のカルパッチョ",
+      "クリームチーズ"
+    ],
+    "description": "山形県の高木酒造が醸す幻の銘酒。フルーティーで甘やかな香りと、滑らかな口当たりが特徴。入手困難な人気銘柄です。",
+    "image_url": "https://example.com/images/juyondai_honmaru.jpg",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "sake_id": "sake_005",
+    "name": "黒龍 石田屋",
+    "brewery_id": "brewery_005",
+    "category": "純米大吟醸",
+    "price": 11000,
+    "alcohol_content": 16.0,
+    "characteristics": {
+      "sweetness": 3,
+      "acidity": 2,
+      "body": 4,
+      "aroma": "上品で深みのある香り。熟成による複雑な風味"
+    },
+    "pairings": [
+      "すき焼き",
+      "うなぎ",
+      "フォアグラ"
+    ],
+    "description": "福井県の黒龍酒造が誇る最高峰。特A地区の山田錦を使用し、長期低温熟成により深みと複雑さを実現した極上の一本。",
+    "image_url": "https://example.com/images/kokuryu_ishidaya.jpg",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "sake_id": "sake_006",
+    "name": "飛露喜 特別純米",
+    "brewery_id": "brewery_006",
+    "category": "特別純米",
+    "price": 3000,
+    "alcohol_content": 16.5,
+    "characteristics": {
+      "sweetness": 3,
+      "acidity": 3,
+      "body": 3,
+      "aroma": "バランスの良い穏やかな香り"
+    },
+    "pairings": [
+      "煮物",
+      "焼き魚",
+      "味噌料理"
+    ],
+    "description": "福島県の廣木酒造が造る人気銘柄。甘味と酸味のバランスが絶妙で、どんな料理とも相性が良い万能型の日本酒です。",
+    "image_url": "https://example.com/images/hiroki_tokubetsu.jpg",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "sake_id": "sake_007",
+    "name": "而今 純米吟醸 八反錦",
+    "brewery_id": "brewery_007",
+    "category": "純米吟醸",
+    "price": 3500,
+    "alcohol_content": 16.0,
+    "characteristics": {
+      "sweetness": 4,
+      "acidity": 3,
+      "body": 2,
+      "aroma": "新鮮なフルーツのような爽やかな香り"
+    },
+    "pairings": [
+      "カルパッチョ",
+      "生春巻き",
+      "フルーツサラダ"
+    ],
+    "description": "三重県の木屋正酒造による現代的な日本酒。フレッシュで果実味豊かな味わいが若い世代にも人気の銘柄です。",
+    "image_url": "https://example.com/images/jikon_hattannishiki.jpg",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "sake_id": "sake_008",
+    "name": "作 純米大吟醸 雅乃智",
+    "brewery_id": "brewery_008",
+    "category": "純米大吟醸",
+    "price": 4500,
+    "alcohol_content": 16.0,
+    "characteristics": {
+      "sweetness": 4,
+      "acidity": 2,
+      "body": 2,
+      "aroma": "華やかで上品な香り。マスカットのようなニュアンス"
+    },
+    "pairings": [
+      "カルパッチョ",
+      "白身魚のムニエル",
+      "チーズ"
+    ],
+    "description": "三重県の清水清三郎商店が醸す人気銘柄。透明感のある味わいと、洗練されたフルーティーな香りが特徴です。",
+    "image_url": "https://example.com/images/zaku_miyabitochi.jpg",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "sake_id": "sake_009",
+    "name": "田酒 特別純米",
+    "brewery_id": "brewery_009",
+    "category": "特別純米",
+    "price": 3300,
+    "alcohol_content": 15.5,
+    "characteristics": {
+      "sweetness": 2,
+      "acidity": 3,
+      "body": 4,
+      "aroma": "米の旨みを感じる落ち着いた香り"
+    },
+    "pairings": [
+      "焼き魚",
+      "煮付け",
+      "鍋料理"
+    ],
+    "description": "青森県の西田酒造店が造る、添加物を一切使わない純米酒の先駆け。米本来の旨みと力強い味わいが魅力です。",
+    "image_url": "https://example.com/images/denshu_tokubetsu.jpg",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "sake_id": "sake_010",
+    "name": "醸し人九平次 純米大吟醸 別誂",
+    "brewery_id": "brewery_010",
+    "category": "純米大吟醸",
+    "price": 6000,
+    "alcohol_content": 16.0,
+    "characteristics": {
+      "sweetness": 3,
+      "acidity": 3,
+      "body": 3,
+      "aroma": "洗練された複雑な香り。白ワインのような要素も"
+    },
+    "pairings": [
+      "フレンチ",
+      "イタリアン",
+      "生ハム"
+    ],
+    "description": "愛知県の萬乗醸造が醸す、世界を目指す日本酒。ワイングラスで楽しむことを前提に設計された、洋食にも合う革新的な一本。",
+    "image_url": "https://example.com/images/kuheiji_betsuatsurae.jpg",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  }
+]

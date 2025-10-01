@@ -1,0 +1,106 @@
+[
+  {
+    "brewery_id": "brewery_001",
+    "name": "旭酒造株式会社",
+    "prefecture": "山口県",
+    "city": "岩国市",
+    "established": 1948,
+    "description": "「獺祭」で知られる山口県の酒蔵。伝統的な杜氏制度を廃し、社員による四季醸造を実現。最高の酒米である山田錦を使用し、精米歩合23%という極限まで磨き上げた純米大吟醸酒を製造。",
+    "website": "https://www.asahishuzo.ne.jp/",
+    "image_url": "https://example.com/images/asahi_shuzo.jpg",
+    "specialties": [
+      "純米大吟醸",
+      "獺祭シリーズ"
+    ],
+    "awards": [
+      "全国新酒鑑評会 金賞受賞",
+      "IWC日本酒部門 トロフィー受賞"
+    ],
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "brewery_id": "brewery_002",
+    "name": "朝日酒造株式会社",
+    "prefecture": "新潟県",
+    "city": "長岡市",
+    "established": 1830,
+    "description": "新潟県を代表する老舗酒蔵。「久保田」ブランドで全国的に知られる。淡麗辛口の新潟酒の伝統を守りつつ、現代的な酒造りにも挑戦。自社田での酒米栽培から醸造まで一貫した品質管理を実施。",
+    "website": "https://www.asahi-shuzo.co.jp/",
+    "image_url": "https://example.com/images/asahi_shuzo_niigata.jpg",
+    "specialties": [
+      "純米大吟醸",
+      "久保田シリーズ"
+    ],
+    "awards": [
+      "全国新酒鑑評会 金賞受賞",
+      "モンドセレクション 金賞受賞"
+    ],
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "brewery_id": "brewery_003",
+    "name": "八海醸造株式会社",
+    "prefecture": "新潟県",
+    "city": "南魚沼市",
+    "established": 1922,
+    "description": "霊峰・八海山の麓に位置する酒蔵。清冽な雪解け水を仕込み水に使用し、淡麗辛口の日本酒を醸造。普通酒から大吟醸まで、全ての製品に吟醸造りの手法を取り入れた高品質な酒造りを実践。",
+    "website": "https://www.hakkaisan.co.jp/",
+    "image_url": "https://example.com/images/hakkaisan.jpg",
+    "specialties": [
+      "純米大吟醸",
+      "本醸造",
+      "八海山シリーズ"
+    ],
+    "awards": [
+      "全国新酒鑑評会 金賞受賞",
+      "インターナショナル・ワイン・チャレンジ SAKE部門 金賞"
+    ],
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "brewery_id": "brewery_004",
+    "name": "高木酒造株式会社",
+    "prefecture": "山形県",
+    "city": "村山市",
+    "established": 1615,
+    "description": "400年以上の歴史を持つ老舗酒蔵。「十四代」ブランドは入手困難な幻の日本酒として知られる。フルーティーで華やかな香りと、洗練された味わいで日本酒ブームを牽引。完全予約制の限定流通を採用。",
+    "website": "https://www.takagi-sake.com/",
+    "image_url": "https://example.com/images/takagi_shuzo.jpg",
+    "specialties": [
+      "純米大吟醸",
+      "純米吟醸",
+      "十四代シリーズ"
+    ],
+    "awards": [
+      "全国新酒鑑評会 金賞受賞多数",
+      "日本酒造組合中央会 表彰"
+    ],
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "brewery_id": "brewery_005",
+    "name": "黒龍酒造株式会社",
+    "prefecture": "福井県",
+    "city": "吉田郡永平寺町",
+    "established": 1804,
+    "description": "福井県を代表する名門酒蔵。特A地区産の山田錦を使用し、長期低温熟成により深みのある味わいを実現。「黒龍」「石田屋」などの銘柄で、日本酒愛好家から高い評価を受ける。伝統と革新を融合した酒造り。",
+    "website": "https://www.kokuryu.co.jp/",
+    "image_url": "https://example.com/images/kokuryu.jpg",
+    "specialties": [
+      "純米大吟醸",
+      "大吟醸",
+      "黒龍シリーズ"
+    ],
+    "awards": [
+      "全国新酒鑑評会 金賞受賞多数",
+      "IWC日本酒部門 トロフィー受賞",
+      "SAKE COMPETITION 金賞受賞"
+    ],
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  }
+]

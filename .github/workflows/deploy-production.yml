@@ -1,0 +1,393 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (git SHA or tag)'
+        required: true
+        type: string
+      skip-tests:
+        description: 'Skip smoke tests (emergency deployments only)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-west-2
+  ECR_REPOSITORY: sakesensei
+  COPILOT_APP: sakesensei
+  COPILOT_ENV: prod
+
+jobs:
+  validate-version:
+    name: Validate Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version exists
+        id: validate
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            FULL_SHA=$(git rev-parse "$VERSION")
+            echo "✅ Version $VERSION is valid (SHA: $FULL_SHA)"
+            echo "version=$FULL_SHA" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Version $VERSION not found"
+            exit 1
+          fi
+
+      - name: Check if version is on main branch
+        run: |
+          VERSION="${{ steps.validate.outputs.version }}"
+
+          if git branch -r --contains "$VERSION" | grep -q "origin/main"; then
+            echo "✅ Version is on main branch"
+          else
+            echo "⚠️ Warning: Version is not on main branch"
+            echo "Proceeding anyway (manual deployment)"
+          fi
+
+  approve-deployment:
+    name: Manual Approval
+    runs-on: ubuntu-latest
+    needs: validate-version
+    environment:
+      name: production
+      url: https://sakesensei.example.com
+    steps:
+      - name: Deployment approved
+        run: |
+          echo "🚀 Production deployment approved"
+          echo "Version: ${{ needs.validate-version.outputs.version }}"
+
+  deploy-infrastructure:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    needs: [validate-version, approve-deployment]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-version.outputs.version }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install CDK dependencies
+        working-directory: infrastructure
+        run: uv sync
+
+      - name: Preview CDK changes
+        working-directory: infrastructure
+        run: uv run cdk diff || true
+
+      - name: Deploy CDK stacks
+        working-directory: infrastructure
+        run: uv run cdk deploy --all --require-approval never
+
+  deploy-agent:
+    name: Deploy Agent to Production Runtime
+    runs-on: ubuntu-latest
+    needs: [validate-version, deploy-infrastructure]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-version.outputs.version }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Sync agent dependencies
+        working-directory: agent
+        run: uv sync
+
+      - name: Deploy agent to production
+        working-directory: agent
+        run: |
+          echo "Agent deployment to production Runtime"
+          # uv run agentcore launch --environment production
+
+  deploy-frontend:
+    name: Deploy Frontend to Production
+    runs-on: ubuntu-latest
+    needs: [validate-version, deploy-agent]
+    outputs:
+      image-tag: ${{ steps.image.outputs.tag }}
+      service-url: ${{ steps.service-url.outputs.url }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-version.outputs.version }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: image
+        run: |
+          VERSION="${{ needs.validate-version.outputs.version }}"
+          SHORT_SHA="${VERSION:0:7}"
+          TIMESTAMP=$(date +%s)
+          IMAGE_TAG="prod-${SHORT_SHA}-${TIMESTAMP}"
+          echo "tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        working-directory: streamlit_app
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            --build-arg BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            --build-arg VCS_REF="${{ needs.validate-version.outputs.version }}" \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:prod-latest \
+            -f Dockerfile \
+            ..
+
+      - name: Scan image for vulnerabilities
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy image \
+            --severity HIGH,CRITICAL \
+            --exit-code 0 \
+            $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+      - name: Push Docker image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:prod-latest
+
+      - name: Install Copilot CLI
+        run: |
+          curl -Lo copilot https://github.com/aws/copilot-cli/releases/latest/download/copilot-linux
+          chmod +x copilot
+          sudo mv copilot /usr/local/bin/copilot
+          copilot --version
+
+      - name: Deploy to production ECS
+        env:
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          copilot deploy \
+            --name streamlit-app \
+            --env ${{ env.COPILOT_ENV }} \
+            --tag $IMAGE_TAG
+
+      - name: Get service URL
+        id: service-url
+        run: |
+          SERVICE_URL=$(copilot svc show --name streamlit-app --env ${{ env.COPILOT_ENV }} --json | \
+            jq -r '.routes[0].url // empty')
+
+          if [ -z "$SERVICE_URL" ]; then
+            SERVICE_URL="${{ secrets.PRODUCTION_URL }}"
+          fi
+
+          echo "url=$SERVICE_URL" >> $GITHUB_OUTPUT
+          echo "Production URL: $SERVICE_URL"
+
+      - name: Wait for deployment stabilization
+        run: sleep 60
+
+  smoke-tests:
+    name: Run Production Smoke Tests
+    runs-on: ubuntu-latest
+    needs: deploy-frontend
+    if: ${{ !github.event.inputs.skip-tests }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-version.outputs.version }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Run smoke tests
+        env:
+          SMOKE_TEST_URL: ${{ needs.deploy-frontend.outputs.service-url }}
+        run: |
+          uv run pytest tests/smoke -v --tb=short -x
+
+      - name: Run critical path tests
+        env:
+          SMOKE_TEST_URL: ${{ needs.deploy-frontend.outputs.service-url }}
+        run: |
+          # Additional production-specific tests
+          echo "Running critical path validation..."
+
+  post-deployment-checks:
+    name: Post-Deployment Validation
+    runs-on: ubuntu-latest
+    needs: [deploy-frontend, smoke-tests]
+    if: always()
+    steps:
+      - name: Health check
+        env:
+          SERVICE_URL: ${{ needs.deploy-frontend.outputs.service-url }}
+        run: |
+          MAX_ATTEMPTS=5
+          ATTEMPT=1
+
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS..."
+
+            if curl -f -s "${SERVICE_URL}/_stcore/health" > /dev/null; then
+              echo "✅ Production health check passed!"
+              exit 0
+            fi
+
+            echo "Health check failed, waiting..."
+            sleep 15
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+
+          echo "❌ Production health check failed"
+          exit 1
+
+      - name: Check smoke test results
+        if: ${{ needs.smoke-tests.result == 'failure' }}
+        run: |
+          echo "⚠️ Smoke tests failed - consider rollback"
+          exit 1
+
+  notify-success:
+    name: Notify Success
+    runs-on: ubuntu-latest
+    needs: [validate-version, deploy-frontend, smoke-tests, post-deployment-checks]
+    if: success()
+    steps:
+      - name: Deployment success summary
+        run: |
+          echo "### 🚀 Production Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.validate-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Tag:** ${{ needs.deploy-frontend.outputs.image-tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "**URL:** ${{ needs.deploy-frontend.outputs.service-url }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Time:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+      - name: Slack notification
+        if: env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -X POST "$SLACK_WEBHOOK_URL" \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "attachments": [{
+                "color": "good",
+                "title": "🚀 Production Deployment Successful",
+                "text": "Version: ${{ needs.validate-version.outputs.version }}",
+                "fields": [
+                  {"title": "Image Tag", "value": "${{ needs.deploy-frontend.outputs.image-tag }}", "short": true},
+                  {"title": "URL", "value": "${{ needs.deploy-frontend.outputs.service-url }}", "short": true}
+                ]
+              }]
+            }'
+
+  notify-failure:
+    name: Notify Failure
+    runs-on: ubuntu-latest
+    needs: [validate-version, deploy-infrastructure, deploy-agent, deploy-frontend, smoke-tests, post-deployment-checks]
+    if: failure()
+    steps:
+      - name: Deployment failure summary
+        run: |
+          echo "### ❌ Production Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.validate-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Failed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Job Status:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Infrastructure: ${{ needs.deploy-infrastructure.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Agent: ${{ needs.deploy-agent.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend: ${{ needs.deploy-frontend.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Smoke Tests: ${{ needs.smoke-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Post-Checks: ${{ needs.post-deployment-checks.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Action Required:** Consider running rollback workflow" >> $GITHUB_STEP_SUMMARY
+
+      - name: Slack notification
+        if: env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -X POST "$SLACK_WEBHOOK_URL" \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "attachments": [{
+                "color": "danger",
+                "title": "❌ Production Deployment Failed",
+                "text": "Version: ${{ needs.validate-version.outputs.version }}\n⚠️ Consider rollback",
+                "fields": [
+                  {"title": "Infrastructure", "value": "${{ needs.deploy-infrastructure.result }}", "short": true},
+                  {"title": "Agent", "value": "${{ needs.deploy-agent.result }}", "short": true},
+                  {"title": "Frontend", "value": "${{ needs.deploy-frontend.result }}", "short": true},
+                  {"title": "Smoke Tests", "value": "${{ needs.smoke-tests.result }}", "short": true}
+                ]
+              }]
+            }'

@@ -1,0 +1,16 @@
+# Trivy ignore file for SakeSensei
+# List CVE IDs to ignore during scanning
+# Format: One CVE ID per line, with optional comment
+
+# Example ignores (remove or modify as needed):
+# CVE-2021-12345  # This vulnerability doesn't affect our usage pattern
+# CVE-2022-54321  # Fixed in newer version, scheduled for upgrade in Q2
+
+# Development dependencies (not in production)
+# Add CVEs here that only affect development tools
+
+# Third-party dependencies with accepted risk
+# Document business decision to accept risk
+
+# False positives
+# Document why these are false positives for our use case

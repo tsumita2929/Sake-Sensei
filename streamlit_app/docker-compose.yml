@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sakesensei-streamlit
+    ports:
+      - "8501:8501"
+    environment:
+      # AWS Configuration
+      - AWS_REGION=${AWS_REGION:-us-west-2}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-west-2}
+
+      # Cognito Configuration
+      - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
+      - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
+      - COGNITO_CLIENT_SECRET=${COGNITO_CLIENT_SECRET:-}
+
+      # AgentCore Configuration
+      - AGENTCORE_RUNTIME_URL=${AGENTCORE_RUNTIME_URL}
+      - AGENTCORE_GATEWAY_URL=${AGENTCORE_GATEWAY_URL}
+      - AGENTCORE_GATEWAY_ID=${AGENTCORE_GATEWAY_ID}
+      - AGENTCORE_AGENT_ID=${AGENTCORE_AGENT_ID:-}
+      - AGENTCORE_MEMORY_ID=${AGENTCORE_MEMORY_ID:-}
+
+      # Lambda Function ARNs
+      - LAMBDA_RECOMMENDATION_ARN=${LAMBDA_RECOMMENDATION_ARN}
+      - LAMBDA_PREFERENCE_ARN=${LAMBDA_PREFERENCE_ARN}
+      - LAMBDA_TASTING_ARN=${LAMBDA_TASTING_ARN}
+      - LAMBDA_BREWERY_ARN=${LAMBDA_BREWERY_ARN}
+      - LAMBDA_IMAGE_RECOGNITION_ARN=${LAMBDA_IMAGE_RECOGNITION_ARN}
+
+      # Feature Flags
+      - FEATURE_IMAGE_RECOGNITION=${FEATURE_IMAGE_RECOGNITION:-true}
+      - FEATURE_EXPORT_HISTORY=${FEATURE_EXPORT_HISTORY:-false}
+
+    # Mount AWS credentials for local development
+    volumes:
+      - ~/.aws:/home/sakesensei/.aws:ro
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    networks:
+      - sakesensei-network
+
+networks:
+  sakesensei-network:
+    driver: bridge

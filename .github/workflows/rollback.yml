@@ -1,0 +1,302 @@
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to rollback'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+      target-version:
+        description: 'Target version to rollback to (SHA or tag, leave empty for previous)'
+        required: false
+        type: string
+      reason:
+        description: 'Reason for rollback'
+        required: true
+        type: string
+
+concurrency:
+  group: rollback-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-west-2
+  COPILOT_APP: sakesensei
+
+jobs:
+  validate-rollback:
+    name: Validate Rollback Request
+    runs-on: ubuntu-latest
+    outputs:
+      target-version: ${{ steps.determine-version.outputs.version }}
+      current-version: ${{ steps.current.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ github.event.inputs.environment == 'prod' && secrets.AWS_ACCESS_KEY_ID_PROD || secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ github.event.inputs.environment == 'prod' && secrets.AWS_SECRET_ACCESS_KEY_PROD || secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install Copilot CLI
+        run: |
+          curl -Lo copilot https://github.com/aws/copilot-cli/releases/latest/download/copilot-linux
+          chmod +x copilot
+          sudo mv copilot /usr/local/bin/copilot
+          copilot --version
+
+      - name: Get current deployment version
+        id: current
+        run: |
+          CURRENT_TAG=$(copilot svc show \
+            --name streamlit-app \
+            --env ${{ github.event.inputs.environment }} \
+            --json | jq -r '.taskDefinition // empty')
+
+          echo "Current task definition: $CURRENT_TAG"
+          echo "version=$CURRENT_TAG" >> $GITHUB_OUTPUT
+
+      - name: Determine target version
+        id: determine-version
+        run: |
+          TARGET="${{ github.event.inputs.target-version }}"
+
+          if [ -z "$TARGET" ]; then
+            echo "No target version specified, getting previous deployment..."
+
+            # List recent task definition revisions
+            TASK_FAMILY="sakesensei-${{ github.event.inputs.environment }}-streamlit-app"
+
+            REVISIONS=$(aws ecs list-task-definitions \
+              --family-prefix "$TASK_FAMILY" \
+              --sort DESC \
+              --max-items 5 \
+              --region ${{ env.AWS_REGION }} \
+              --query 'taskDefinitionArns[]' \
+              --output text)
+
+            # Get the second most recent (previous) version
+            PREVIOUS=$(echo "$REVISIONS" | awk '{print $2}')
+
+            if [ -z "$PREVIOUS" ]; then
+              echo "❌ Could not determine previous version"
+              exit 1
+            fi
+
+            echo "Previous version: $PREVIOUS"
+            echo "version=$PREVIOUS" >> $GITHUB_OUTPUT
+          else
+            # Validate provided version
+            if git rev-parse "$TARGET" >/dev/null 2>&1; then
+              FULL_SHA=$(git rev-parse "$TARGET")
+              echo "✅ Target version $TARGET is valid (SHA: $FULL_SHA)"
+              echo "version=$FULL_SHA" >> $GITHUB_OUTPUT
+            else
+              echo "❌ Target version $TARGET not found"
+              exit 1
+            fi
+          fi
+
+      - name: Rollback summary
+        run: |
+          echo "### Rollback Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Current Version:** ${{ steps.current.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Target Version:** ${{ steps.determine-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Reason:** ${{ github.event.inputs.reason }}" >> $GITHUB_STEP_SUMMARY
+
+  approve-rollback:
+    name: Approve Rollback
+    runs-on: ubuntu-latest
+    needs: validate-rollback
+    environment:
+      name: ${{ github.event.inputs.environment == 'prod' && 'production-rollback' || 'staging-rollback' }}
+    steps:
+      - name: Rollback approved
+        run: |
+          echo "🔄 Rollback approved for ${{ github.event.inputs.environment }}"
+          echo "Target: ${{ needs.validate-rollback.outputs.target-version }}"
+
+  rollback-service:
+    name: Rollback ECS Service
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, approve-rollback]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ github.event.inputs.environment == 'prod' && secrets.AWS_ACCESS_KEY_ID_PROD || secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ github.event.inputs.environment == 'prod' && secrets.AWS_SECRET_ACCESS_KEY_PROD || secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install Copilot CLI
+        run: |
+          curl -Lo copilot https://github.com/aws/copilot-cli/releases/latest/download/copilot-linux
+          chmod +x copilot
+          sudo mv copilot /usr/local/bin/copilot
+          copilot --version
+
+      - name: Perform rollback
+        run: |
+          echo "Rolling back to ${{ needs.validate-rollback.outputs.target-version }}..."
+
+          # Option 1: Rollback using Copilot (if supported)
+          copilot svc rollback \
+            --name streamlit-app \
+            --env ${{ github.event.inputs.environment }} || true
+
+          # Option 2: Update service with previous task definition
+          TASK_FAMILY="sakesensei-${{ github.event.inputs.environment }}-streamlit-app"
+          CLUSTER_NAME="sakesensei-${{ github.event.inputs.environment }}"
+          SERVICE_NAME="streamlit-app"
+
+          aws ecs update-service \
+            --cluster "$CLUSTER_NAME" \
+            --service "$SERVICE_NAME" \
+            --task-definition "${{ needs.validate-rollback.outputs.target-version }}" \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Wait for rollback to complete
+        run: |
+          CLUSTER_NAME="sakesensei-${{ github.event.inputs.environment }}"
+          SERVICE_NAME="streamlit-app"
+
+          echo "Waiting for service to stabilize..."
+
+          aws ecs wait services-stable \
+            --cluster "$CLUSTER_NAME" \
+            --services "$SERVICE_NAME" \
+            --region ${{ env.AWS_REGION }}
+
+          echo "✅ Rollback completed successfully"
+
+  verify-rollback:
+    name: Verify Rollback
+    runs-on: ubuntu-latest
+    needs: rollback-service
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Get service URL
+        id: service-url
+        env:
+          ENVIRONMENT: ${{ github.event.inputs.environment }}
+        run: |
+          if [ "$ENVIRONMENT" = "prod" ]; then
+            URL="${{ secrets.PRODUCTION_URL }}"
+          else
+            URL="http://sakese-Publi-5SDe3QrKne55-1360562030.us-west-2.elb.amazonaws.com"
+          fi
+
+          echo "url=$URL" >> $GITHUB_OUTPUT
+
+      - name: Health check
+        env:
+          SERVICE_URL: ${{ steps.service-url.outputs.url }}
+        run: |
+          MAX_ATTEMPTS=10
+          ATTEMPT=1
+
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS..."
+
+            if curl -f -s "${SERVICE_URL}/_stcore/health" > /dev/null; then
+              echo "✅ Health check passed after rollback!"
+              exit 0
+            fi
+
+            echo "Health check failed, waiting..."
+            sleep 10
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+
+          echo "❌ Health check failed after rollback"
+          exit 1
+
+      - name: Run basic smoke tests
+        env:
+          SMOKE_TEST_URL: ${{ steps.service-url.outputs.url }}
+        run: |
+          uv run pytest tests/smoke/test_health.py -v --tb=short
+
+  notify:
+    name: Notify Team
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, rollback-service, verify-rollback]
+    if: always()
+    steps:
+      - name: Rollback result summary
+        run: |
+          STATUS="${{ needs.verify-rollback.result }}"
+
+          if [ "$STATUS" = "success" ]; then
+            EMOJI="✅"
+            TITLE="Rollback Successful"
+          else
+            EMOJI="❌"
+            TITLE="Rollback Failed"
+          fi
+
+          echo "### $EMOJI $TITLE" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Target Version:** ${{ needs.validate-rollback.outputs.target-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Reason:** ${{ github.event.inputs.reason }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** $STATUS" >> $GITHUB_STEP_SUMMARY
+          echo "**Time:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+      - name: Slack notification
+        if: env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          STATUS="${{ needs.verify-rollback.result }}"
+
+          if [ "$STATUS" = "success" ]; then
+            EMOJI="✅"
+            COLOR="warning"
+            TITLE="Rollback Successful"
+          else
+            EMOJI="❌"
+            COLOR="danger"
+            TITLE="Rollback Failed"
+          fi
+
+          curl -X POST "$SLACK_WEBHOOK_URL" \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "attachments": [{
+                "color": "'"$COLOR"'",
+                "title": "'"$EMOJI $TITLE"'",
+                "text": "Environment: ${{ github.event.inputs.environment }}\nReason: ${{ github.event.inputs.reason }}",
+                "fields": [
+                  {"title": "Target Version", "value": "${{ needs.validate-rollback.outputs.target-version }}", "short": true},
+                  {"title": "Status", "value": "'"$STATUS"'", "short": true}
+                ]
+              }]
+            }'

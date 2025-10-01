@@ -1,0 +1,7 @@
+# Sake Sensei - Development Environment Configuration
+name: dev
+type: Environment
+
+# Observability
+observability:
+  container_insights: true

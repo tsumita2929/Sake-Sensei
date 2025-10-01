@@ -1,0 +1,195 @@
+# Safety configuration file for SakeSensei
+# Dependency vulnerability scanning policy
+
+# Security policy configuration
+security:
+  # Ignore specific vulnerabilities (use with caution)
+  # Format: vulnerability-id or CVE-id
+  ignore-vulnerabilities:
+    # Example: Ignore specific CVE if it doesn't apply to our usage
+    # - 12345  # CVE-YYYY-XXXXX: Description of why it's safe to ignore
+
+  # Ignore vulnerabilities for specific packages (use with caution)
+  # ignore-packages:
+  #   - package-name==version
+
+  # Continue on vulnerable dependencies (for CI)
+  # Set to false to fail the build on vulnerabilities
+  continue-on-vulnerability-error: false
+
+  # Transitive dependencies
+  # Whether to include transitive (indirect) dependencies
+  include-transitive: true
+
+# Severity filtering
+# Minimum severity level to report
+# Options: low, medium, high, critical
+# Default: all severities
+minimum-severity: medium
+
+# Output configuration
+output:
+  # Output format options: text, json, html, bare
+  format: json
+
+  # File path for output (optional)
+  # file: safety-report.json
+
+# Proxy configuration (if needed)
+# proxy:
+#   host: proxy.example.com
+#   port: 8080
+#   protocol: https
+
+# API configuration
+# Safety DB API settings
+api:
+  # API key for Safety DB (optional, for enhanced features)
+  # key: your-api-key-here
+
+  # URL for Safety DB API
+  # url: https://safetycli.com
+
+  # Request timeout in seconds
+  timeout: 30
+
+# Package sources
+# Define where to check for vulnerabilities
+sources:
+  # PyPI (default)
+  - name: pypi
+    enabled: true
+
+# Alerting configuration
+alerts:
+  # Enable email alerts (requires Safety Pro)
+  email: false
+
+  # Slack webhook for alerts (optional)
+  # slack-webhook: https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+
+# Report configuration
+report:
+  # Include detailed vulnerability information
+  detailed: true
+
+  # Include remediation suggestions
+  remediation: true
+
+  # Include CVSS scores
+  cvss-scores: true
+
+  # Include affected versions
+  affected-versions: true
+
+# Audit configuration
+audit:
+  # Enable audit logging
+  enabled: true
+
+  # Audit log file path
+  # log-file: safety-audit.log
+
+# Cache configuration
+cache:
+  # Enable caching of Safety DB
+  enabled: true
+
+  # Cache directory
+  # directory: .safety-cache
+
+  # Cache expiration in hours
+  expiration: 24
+
+# Exemptions
+# Temporary exemptions for vulnerabilities being addressed
+exemptions:
+  # Example exemption
+  # - vulnerability-id: 12345
+  #   package: example-package
+  #   version: 1.2.3
+  #   reason: "Workaround implemented, fix scheduled for next sprint"
+  #   expires: 2025-12-31
+  #   approved-by: security-team
+
+# Custom policies
+policies:
+  # License checking (requires Safety Pro)
+  # allowed-licenses:
+  #   - MIT
+  #   - Apache-2.0
+  #   - BSD-3-Clause
+
+  # Blocked packages (always fail if found)
+  # blocked-packages:
+  #   - package-name  # Reason for blocking
+
+  # Required packages (warn if missing)
+  # required-packages:
+  #   - package-name>=version
+
+# Development settings
+development:
+  # Ignore dev dependencies in production checks
+  ignore-dev-dependencies: false
+
+  # Separate policy for development vs production
+  environment-specific: false
+
+# Notifications
+notifications:
+  # Notify on new vulnerabilities
+  on-new-vulnerability: true
+
+  # Notify on fixed vulnerabilities
+  on-fixed-vulnerability: true
+
+  # Notification channels
+  channels:
+    # GitHub Issues (requires configuration)
+    # github-issues: true
+
+    # Slack notifications
+    # slack: true
+
+    # Email notifications
+    # email: false
+
+# Integration settings
+integrations:
+  # GitHub Security Advisories
+  github-security-advisories: true
+
+  # National Vulnerability Database (NVD)
+  nvd: true
+
+  # OSV (Open Source Vulnerabilities)
+  osv: true
+
+# Scanning behavior
+scanning:
+  # Fail the scan if any vulnerability is found
+  fail-on-any-vulnerability: false
+
+  # Fail the scan if critical vulnerability is found
+  fail-on-critical: true
+
+  # Fail the scan if high severity vulnerability is found
+  fail-on-high: true
+
+  # Retry on API failures
+  retry-on-api-failure: true
+
+  # Number of retries
+  max-retries: 3
+
+  # Retry delay in seconds
+  retry-delay: 5
+
+# Metadata
+metadata:
+  project-name: SakeSensei
+  project-version: 1.0.0
+  environment: production
+  team: sake-team
+  contact: team@sakesensei.example.com

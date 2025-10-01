@@ -1,0 +1,309 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bandit:
+    name: Bandit Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Run Bandit
+        run: |
+          uv run bandit \
+            -r streamlit_app backend agent \
+            -f json \
+            -o bandit-report.json \
+            --severity-level medium \
+            --confidence-level medium \
+            --exit-zero
+
+      - name: Generate Bandit HTML report
+        if: always()
+        run: |
+          uv run bandit \
+            -r streamlit_app backend agent \
+            -f html \
+            -o bandit-report.html \
+            --severity-level medium \
+            --confidence-level medium \
+            --exit-zero
+
+      - name: Upload Bandit reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-security-reports
+          path: |
+            bandit-report.json
+            bandit-report.html
+
+      - name: Check for high severity issues
+        run: |
+          HIGH_ISSUES=$(uv run bandit \
+            -r streamlit_app backend agent \
+            -f json \
+            --severity-level high \
+            --exit-zero | jq '.results | length')
+
+          echo "High severity issues found: $HIGH_ISSUES"
+
+          if [ "$HIGH_ISSUES" -gt 0 ]; then
+            echo "⚠️ Found $HIGH_ISSUES high severity security issues"
+            echo "Please review the Bandit report"
+            # Don't fail the build, just warn
+          fi
+
+  safety:
+    name: Safety Dependency Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Export requirements
+        run: |
+          uv export --no-hashes --format requirements-txt > requirements-export.txt
+
+      - name: Run Safety check
+        run: |
+          uv run safety check \
+            --file requirements-export.txt \
+            --json \
+            --output safety-report.json \
+            --continue-on-error || true
+
+      - name: Generate Safety text report
+        if: always()
+        run: |
+          uv run safety check \
+            --file requirements-export.txt \
+            --output safety-report.txt \
+            --continue-on-error || true
+
+      - name: Upload Safety reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: safety-security-reports
+          path: |
+            safety-report.json
+            safety-report.txt
+
+      - name: Check for vulnerabilities
+        run: |
+          if [ -f safety-report.json ]; then
+            VULN_COUNT=$(jq '.vulnerabilities | length' safety-report.json 2>/dev/null || echo "0")
+            echo "Vulnerabilities found: $VULN_COUNT"
+
+            if [ "$VULN_COUNT" -gt 0 ]; then
+              echo "⚠️ Found $VULN_COUNT vulnerable dependencies"
+              echo "Please review the Safety report"
+            fi
+          fi
+
+  trivy-fs:
+    name: Trivy Filesystem Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner (filesystem)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-fs-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          exit-code: '0'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-fs-results.sarif'
+          category: 'trivy-fs'
+
+      - name: Generate Trivy table report
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            aquasec/trivy fs \
+            --format table \
+            --output /workspace/trivy-fs-report.txt \
+            --severity CRITICAL,HIGH,MEDIUM \
+            /workspace
+
+      - name: Upload Trivy filesystem reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-fs-reports
+          path: |
+            trivy-fs-results.sarif
+            trivy-fs-report.txt
+
+  trivy-docker:
+    name: Trivy Docker Image Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image for scanning
+        working-directory: streamlit_app
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            -t sakesensei:scan \
+            -f Dockerfile \
+            ..
+
+      - name: Run Trivy vulnerability scanner (image)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'sakesensei:scan'
+          format: 'sarif'
+          output: 'trivy-image-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          exit-code: '0'
+
+      - name: Upload Trivy image results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-image-results.sarif'
+          category: 'trivy-image'
+
+      - name: Generate Trivy image table report
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy image \
+            --format table \
+            --output trivy-image-report.txt \
+            --severity CRITICAL,HIGH,MEDIUM \
+            sakesensei:scan
+
+      - name: Upload Trivy image reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-image-reports
+          path: |
+            trivy-image-results.sarif
+            trivy-image-report.txt
+
+      - name: Check for critical vulnerabilities
+        run: |
+          CRITICAL=$(docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy image \
+            --format json \
+            --severity CRITICAL \
+            sakesensei:scan | jq '[.Results[]?.Vulnerabilities[]?] | length')
+
+          echo "Critical vulnerabilities: $CRITICAL"
+
+          if [ "$CRITICAL" -gt 0 ]; then
+            echo "⚠️ Found $CRITICAL CRITICAL vulnerabilities in Docker image"
+            echo "Please review the Trivy image report"
+          fi
+
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  summary:
+    name: Security Scan Summary
+    runs-on: ubuntu-latest
+    needs: [bandit, safety, trivy-fs, trivy-docker, secret-scan]
+    if: always()
+    steps:
+      - name: Download all reports
+        uses: actions/download-artifact@v4
+        with:
+          path: security-reports
+
+      - name: Create summary
+        run: |
+          echo "### 🔒 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Scan Date:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scanner | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Bandit (Code Security) | ${{ needs.bandit.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Safety (Dependencies) | ${{ needs.safety.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy (Filesystem) | ${{ needs.trivy-fs.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy (Docker Image) | ${{ needs.trivy-docker.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secret Scan | ${{ needs.secret-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📋 Detailed reports are available in the workflow artifacts." >> $GITHUB_STEP_SUMMARY
+
+      - name: Check if any scan failed
+        if: |
+          needs.bandit.result == 'failure' ||
+          needs.safety.result == 'failure' ||
+          needs.trivy-fs.result == 'failure' ||
+          needs.trivy-docker.result == 'failure' ||
+          needs.secret-scan.result == 'failure'
+        run: |
+          echo "❌ One or more security scans failed"
+          echo "Please review the reports and address the issues"
+          exit 1

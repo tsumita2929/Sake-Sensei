@@ -1,0 +1,69 @@
+# Sake Sensei - Streamlit Application Service Manifest
+name: streamlit-app
+type: Load Balanced Web Service
+
+# Service Configuration
+image:
+  build:
+    dockerfile: streamlit_app/Dockerfile
+    args:
+      BUILDPLATFORM: linux/amd64
+      TARGETPLATFORM: linux/amd64
+  port: 8501
+  platform: linux/amd64
+
+# ALB Configuration
+http:
+  path: '/'
+  healthcheck:
+    path: /_stcore/health
+    success_codes: '200'
+    healthy_threshold: 2
+    unhealthy_threshold: 3
+    interval: 30s
+    timeout: 10s
+  deregistration_delay: 30s
+  stickiness: true
+
+# CPU and Memory
+cpu: 512
+memory: 1024
+
+# Auto Scaling
+count:
+  range:
+    min: 1
+    max: 3
+    spot_from: 2
+  cpu_percentage: 70
+  memory_percentage: 80
+
+# Task Configuration
+exec: true  # Enable ECS Exec for debugging
+
+# Environment Variables
+variables:
+  AWS_REGION: us-west-2
+  FEATURE_IMAGE_RECOGNITION: true
+  FEATURE_EXPORT_HISTORY: false
+  COGNITO_USER_POOL_ID: us-west-2_aGgG1sEaO
+  COGNITO_CLIENT_ID: msc2tlhn84kakjj4bu85obosd
+  AGENTCORE_RUNTIME_URL: https://agent-runtime.bedrock.amazonaws.com
+  AGENTCORE_GATEWAY_URL: https://gateway.bedrock.us-west-2.amazonaws.com/sakesensei-gateway-98idnabr4g
+  AGENTCORE_GATEWAY_ID: sakesensei-gateway-98idnabr4g
+  LAMBDA_RECOMMENDATION_ARN: arn:aws:lambda:us-west-2:093325005283:function:SakeSensei-Recommendation
+  LAMBDA_PREFERENCE_ARN: arn:aws:lambda:us-west-2:093325005283:function:SakeSensei-Preference
+  LAMBDA_TASTING_ARN: arn:aws:lambda:us-west-2:093325005283:function:SakeSensei-Tasting
+  LAMBDA_BREWERY_ARN: arn:aws:lambda:us-west-2:093325005283:function:SakeSensei-Brewery
+  LAMBDA_IMAGE_RECOGNITION_ARN: arn:aws:lambda:us-west-2:093325005283:function:SakeSensei-ImageRecognition
+
+# IAM Permissions
+# Attach IAM policies to allow the task to invoke Lambda functions and access DynamoDB
+environments:
+  dev:
+    count:
+      range:
+        min: 1
+        max: 2
+    cpu: 256
+    memory: 512

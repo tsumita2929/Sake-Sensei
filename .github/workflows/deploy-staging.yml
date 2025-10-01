@@ -1,0 +1,286 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-west-2
+  ECR_REPOSITORY: sakesensei
+  COPILOT_APP: sakesensei
+  COPILOT_ENV: dev
+
+jobs:
+  deploy-infrastructure:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install CDK dependencies
+        working-directory: infrastructure
+        run: uv sync
+
+      - name: CDK Bootstrap (if needed)
+        working-directory: infrastructure
+        run: uv run cdk bootstrap aws://unknown-account/${{ env.AWS_REGION }} || true
+
+      - name: Deploy CDK stacks
+        working-directory: infrastructure
+        run: uv run cdk deploy --all --require-approval never
+
+      - name: Get stack outputs
+        id: stack-outputs
+        run: |
+          COGNITO_USER_POOL_ID=$(aws cloudformation describe-stacks \
+            --stack-name SakeSenseiAuthStack \
+            --query 'Stacks[0].Outputs[?OutputKey==`UserPoolId`].OutputValue' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+
+          COGNITO_CLIENT_ID=$(aws cloudformation describe-stacks \
+            --stack-name SakeSenseiAuthStack \
+            --query 'Stacks[0].Outputs[?OutputKey==`UserPoolClientId`].OutputValue' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+
+          echo "cognito_user_pool_id=$COGNITO_USER_POOL_ID" >> $GITHUB_OUTPUT
+          echo "cognito_client_id=$COGNITO_CLIENT_ID" >> $GITHUB_OUTPUT
+
+      - name: Upload stack outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: stack-outputs
+          path: |
+            infrastructure/cdk.out/
+
+  deploy-agent:
+    name: Deploy Agent to Runtime
+    runs-on: ubuntu-latest
+    needs: deploy-infrastructure
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Sync agent dependencies
+        working-directory: agent
+        run: uv sync
+
+      - name: Deploy agent (if agentcore CLI available)
+        working-directory: agent
+        run: |
+          echo "Agent deployment would happen here with AgentCore CLI"
+          echo "This requires agentcore CLI to be installed and configured"
+          # uv run agentcore configure --entrypoint entrypoint.py
+          # uv run agentcore launch --environment staging
+
+  build-and-deploy-frontend:
+    name: Build and Deploy Frontend
+    runs-on: ubuntu-latest
+    needs: deploy-agent
+    outputs:
+      image-tag: ${{ steps.image.outputs.tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: image
+        run: |
+          IMAGE_TAG="${GITHUB_SHA:0:7}-$(date +%s)"
+          echo "tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        working-directory: streamlit_app
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            -f Dockerfile \
+            ..
+
+      - name: Push Docker image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Install Copilot CLI
+        run: |
+          curl -Lo copilot https://github.com/aws/copilot-cli/releases/latest/download/copilot-linux
+          chmod +x copilot
+          sudo mv copilot /usr/local/bin/copilot
+          copilot --version
+
+      - name: Deploy to ECS via Copilot
+        env:
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          copilot deploy \
+            --name streamlit-app \
+            --env ${{ env.COPILOT_ENV }} \
+            --tag $IMAGE_TAG
+
+      - name: Get service URL
+        id: service-url
+        run: |
+          SERVICE_URL=$(copilot svc show --name streamlit-app --env ${{ env.COPILOT_ENV }} --json | \
+            jq -r '.routes[0].url // empty')
+
+          if [ -z "$SERVICE_URL" ]; then
+            SERVICE_URL="http://sakese-Publi-5SDe3QrKne55-1360562030.us-west-2.elb.amazonaws.com"
+          fi
+
+          echo "url=$SERVICE_URL" >> $GITHUB_OUTPUT
+          echo "Staging URL: $SERVICE_URL"
+
+      - name: Wait for deployment
+        run: sleep 30
+
+      - name: Health check
+        env:
+          SERVICE_URL: ${{ steps.service-url.outputs.url }}
+        run: |
+          MAX_ATTEMPTS=10
+          ATTEMPT=1
+
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS..."
+
+            if curl -f -s "${SERVICE_URL}/_stcore/health" > /dev/null; then
+              echo "✅ Health check passed!"
+              exit 0
+            fi
+
+            echo "Health check failed, waiting..."
+            sleep 10
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+
+          echo "❌ Health check failed after $MAX_ATTEMPTS attempts"
+          exit 1
+
+  run-e2e-tests:
+    name: Run E2E Tests
+    runs-on: ubuntu-latest
+    needs: build-and-deploy-frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Run smoke tests
+        env:
+          SMOKE_TEST_URL: ${{ needs.build-and-deploy-frontend.outputs.url || 'http://sakese-Publi-5SDe3QrKne55-1360562030.us-west-2.elb.amazonaws.com' }}
+        run: |
+          uv run pytest tests/smoke -v --tb=short
+
+  notify:
+    name: Notify Team
+    runs-on: ubuntu-latest
+    needs: [deploy-infrastructure, deploy-agent, build-and-deploy-frontend, run-e2e-tests]
+    if: always()
+    steps:
+      - name: Deployment summary
+        run: |
+          echo "### Staging Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Infrastructure:** ${{ needs.deploy-infrastructure.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Agent:** ${{ needs.deploy-agent.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Frontend:** ${{ needs.build-and-deploy-frontend.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "**E2E Tests:** ${{ needs.run-e2e-tests.result }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Slack notification (if configured)
+        if: env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          STATUS="${{ job.status }}"
+          if [ "$STATUS" = "success" ]; then
+            EMOJI="✅"
+            COLOR="good"
+          else
+            EMOJI="❌"
+            COLOR="danger"
+          fi
+
+          curl -X POST "$SLACK_WEBHOOK_URL" \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "attachments": [{
+                "color": "'"$COLOR"'",
+                "title": "'"$EMOJI"' Staging Deployment",
+                "text": "Commit: ${{ github.sha }}\nStatus: '"$STATUS"'",
+                "fields": [
+                  {"title": "Infrastructure", "value": "${{ needs.deploy-infrastructure.result }}", "short": true},
+                  {"title": "Agent", "value": "${{ needs.deploy-agent.result }}", "short": true},
+                  {"title": "Frontend", "value": "${{ needs.build-and-deploy-frontend.result }}", "short": true},
+                  {"title": "E2E Tests", "value": "${{ needs.run-e2e-tests.result }}", "short": true}
+                ]
+              }]
+            }'
