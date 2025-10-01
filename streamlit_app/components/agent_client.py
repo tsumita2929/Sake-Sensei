@@ -1,41 +1,33 @@
 """
 Sake Sensei - AI Agent Client
 
-Client for AI-powered sake recommendations using Amazon Bedrock.
+Client for AI-powered sake recommendations using AgentCore Runtime.
 """
 
 from collections.abc import Generator
 from typing import Any
 
 import streamlit as st
+from components.agentcore_runtime_client import AgentCoreRuntimeClient
 from components.bedrock_client import BedrockClient
 from utils.config import config
 from utils.session import SessionManager
 
 
 class AgentCoreClient:
-    """Client for AI agent communication (using Bedrock)."""
+    """Client for AI agent communication via AgentCore Runtime."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize AI client."""
-        # Use Bedrock directly instead of AgentCore
-        self.bedrock_client = BedrockClient()
-        self.runtime_url = config.AGENTCORE_RUNTIME_URL  # Keep for future AgentCore migration
-        self.agent_id = config.AGENTCORE_AGENT_ID
-        self.gateway_url = config.AGENTCORE_GATEWAY_URL
+        # Use AgentCore Runtime if configured, fallback to Bedrock direct
+        self.runtime_url = config.AGENTCORE_RUNTIME_URL
+        self.use_runtime = bool(self.runtime_url)
 
-    def _get_headers(self) -> dict[str, str]:
-        """Get request headers with authentication."""
-        headers = {
-            "Content-Type": "application/json",
-        }
-
-        # Add ID token for authentication
-        id_token = SessionManager.get_id_token()
-        if id_token:
-            headers["Authorization"] = f"Bearer {id_token}"
-
-        return headers
+        if self.use_runtime:
+            self.runtime_client = AgentCoreRuntimeClient()
+        else:
+            # Fallback to direct Bedrock (legacy)
+            self.bedrock_client = BedrockClient()
 
     def invoke_agent(
         self,
@@ -48,30 +40,45 @@ class AgentCoreClient:
 
         Args:
             prompt: User prompt/message
-            session_id: Optional session ID for conversation continuity (not used yet)
-            context: Optional additional context (not used yet)
+            session_id: Optional session ID for conversation continuity
+            context: Optional additional context
 
         Yields:
             Streaming response chunks
         """
-        # Note: session_id and context parameters kept for future AgentCore migration
-        _ = session_id
-        _ = context
-
         try:
-            # Get chat history from session
-            chat_history = SessionManager.get_chat_history()
+            # Use AgentCore Runtime if configured
+            if self.use_runtime:
+                # Build context with user preferences and chat history
+                user_context = context or {}
 
-            # Get user preferences if available
-            user_context = {}
-            preferences = SessionManager.get_preferences()
-            if preferences:
-                user_context["preferences"] = preferences
+                # Add user preferences
+                preferences = SessionManager.get_preferences()
+                if preferences:
+                    user_context["preferences"] = preferences
 
-            # Use Bedrock for AI responses
-            yield from self.bedrock_client.invoke_streaming(
-                prompt=prompt, chat_history=chat_history, user_context=user_context
-            )
+                # Add chat history
+                chat_history = SessionManager.get_chat_history()
+                if chat_history:
+                    user_context["chat_history"] = chat_history
+
+                # Invoke AgentCore Runtime
+                yield from self.runtime_client.invoke_agent_streaming(
+                    prompt=prompt, session_id=session_id, context=user_context
+                )
+
+            else:
+                # Fallback to direct Bedrock
+                chat_history = SessionManager.get_chat_history()
+
+                user_context = {}
+                preferences = SessionManager.get_preferences()
+                if preferences:
+                    user_context["preferences"] = preferences
+
+                yield from self.bedrock_client.invoke_streaming(
+                    prompt=prompt, chat_history=chat_history, user_context=user_context
+                )
 
         except Exception as e:
             yield {"type": "error", "error": f"AI error: {str(e)}"}
@@ -110,11 +117,11 @@ class AgentCoreClient:
 class AgentChat:
     """Chat interface component for agent interaction."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize chat interface."""
         self.client = AgentCoreClient()
 
-    def render(self):
+    def render(self) -> None:
         """Render chat interface."""
         st.markdown("### 💬 Sake Sensei に質問")
 
@@ -211,7 +218,7 @@ class AgentChat:
                         st.error(f"❌ エラーが発生しました: {str(e)}")
 
 
-def render_agent_chat():
+def render_agent_chat() -> None:
     """Render agent chat interface (helper function)."""
     chat = AgentChat()
     chat.render()

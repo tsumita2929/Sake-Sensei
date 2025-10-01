@@ -6,6 +6,7 @@ Main entry point for the Sake Sensei agent running on Amazon Bedrock AgentCore R
 
 import logging
 import os
+from typing import Any
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from dotenv import load_dotenv
@@ -17,8 +18,9 @@ from strands.agent.conversation_manager import SlidingWindowConversationManager
 from strands.models import BedrockModel
 from strands.tools.mcp import MCPClient
 
-# Import system prompt
+# Import system prompt and tools
 from agent.system_prompt import SAKE_SENSEI_SYSTEM_PROMPT
+from agent.tools.image_recognition_tool import create_image_recognition_tool
 
 # Load environment variables
 load_dotenv()
@@ -61,7 +63,7 @@ agent = None
 mcp_client = None
 
 
-def get_auth_token():
+def get_auth_token() -> str | None:
     """
     Get authentication token for Gateway access.
     In AgentCore Runtime, tokens are typically provided via environment or context.
@@ -79,7 +81,7 @@ def get_auth_token():
     return None
 
 
-def initialize_agent():
+def initialize_agent() -> tuple[Agent | None, MCPClient | None]:
     """Initialize the Strands Agent with MCP tools from Gateway."""
     global agent, mcp_client
 
@@ -90,7 +92,21 @@ def initialize_agent():
         auth_token = get_auth_token()
         headers = {"Authorization": f"Bearer {auth_token}"} if auth_token else {}
 
-        # Create MCP client connected to Gateway
+        # Initialize tools list with native image recognition tool
+        tools = []
+
+        # Add native image recognition tool
+        logger.info("Adding native image recognition tool...")
+        try:
+            image_tool = create_image_recognition_tool(
+                aws_region=os.getenv("AWS_REGION", "us-west-2")
+            )
+            tools.append(image_tool)
+            logger.info("✅ Image recognition tool added")
+        except Exception as e:
+            logger.warning(f"Failed to add image recognition tool: {e}")
+
+        # Create MCP client connected to Gateway for other tools
         logger.info(f"Connecting to Gateway at {GATEWAY_URL}")
         try:
             mcp_client = MCPClient(
@@ -100,10 +116,13 @@ def initialize_agent():
             # Enter context manager
             mcp_client.__enter__()
 
-            # List available tools
+            # List available tools from Gateway
             logger.info("Fetching tools from Gateway...")
-            tools = mcp_client.list_tools_sync()
-            logger.info(f"Loaded {len(tools)} tools from Gateway")
+            gateway_tools = mcp_client.list_tools_sync()
+            logger.info(f"Loaded {len(gateway_tools)} tools from Gateway")
+
+            # Add Gateway tools to tools list
+            tools.extend(gateway_tools)
 
             # Log tool names
             if tools:
@@ -113,12 +132,13 @@ def initialize_agent():
                         tool_names.append(tool.schema.name)
                     elif hasattr(tool, "_name"):
                         tool_names.append(tool._name)
+                    elif hasattr(tool, "name"):
+                        tool_names.append(tool.name)
                 logger.info(f"Available tools: {', '.join(tool_names)}")
 
         except Exception as e:
             logger.error(f"Error connecting to Gateway: {e}", exc_info=True)
-            logger.warning("Agent will run without MCP tools")
-            tools = []
+            logger.warning("Agent will run with native tools only (no Gateway tools)")
 
         # Create Bedrock model
         logger.info(f"Initializing Bedrock model: {MODEL_ID}")
@@ -133,6 +153,7 @@ def initialize_agent():
         )
 
         logger.info("✅ Sake Sensei Agent initialized successfully!")
+        logger.info(f"Total tools available: {len(tools)}")
         return agent, mcp_client
 
     except Exception as e:
@@ -149,7 +170,7 @@ if not agent:
 
 
 @app.entrypoint
-async def process_request(payload):
+async def process_request(payload: dict[str, Any]) -> Any:
     """
     Main entrypoint for AgentCore Runtime requests.
 

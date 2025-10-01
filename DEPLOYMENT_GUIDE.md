@@ -1,327 +1,215 @@
-# Sake Sensei - Deployment Guide
+# Sake Sensei - デプロイメントガイド
 
-このガイドでは、Sake SenseiアプリケーションをAWS ECS (Fargate) にデプロイする手順を説明します。
+## 📋 概要
 
-## 前提条件
+Sake Sensei を Amazon Bedrock AgentCore + AWS ECS にデプロイする完全ガイド。
 
-### 必要なツール
+## 🏗️ アーキテクチャ
 
-- [AWS CLI](https://aws.amazon.com/cli/) v2.x以降
-- [AWS Copilot CLI](https://aws.github.io/copilot-cli/) v1.30以降
-- [Docker](https://www.docker.com/) v20.x以降
-- [uv](https://github.com/astral-sh/uv) (Python package manager)
-
-### AWS認証情報
-
-```bash
-# AWS認証情報が設定されていることを確認
-aws sts get-caller-identity
-
-# 出力例:
-# {
-#     "UserId": "AIDAXXXXXXXXXXXXXXXXX",
-#     "Account": "123456789012",
-#     "Arn": "arn:aws:iam::123456789012:user/your-user"
-# }
+```
+User → ALB → ECS (Streamlit) → AgentCore Runtime (Agent) → Bedrock Claude 4.5
+                              ↘ AgentCore Gateway (MCP) → Lambda Functions
+                                                        ↘ DynamoDB
 ```
 
-### 環境変数の準備
+### 主要コンポーネント
 
-`.env.example`を参考に`.env`ファイルを作成し、以下の値を設定してください：
+1. **Streamlit App** (ECS Fargate)
+   - UI/UXレイヤー
+   - AgentCore Runtime Client
+   - Backend Helper (Gateway Client)
+
+2. **AgentCore Runtime** (Agent)
+   - Strands Agent
+   - Native Tools (Image Recognition)
+   - Gateway Tools経由でLambda呼び出し
+
+3. **AgentCore Gateway** (MCP)
+   - Lambda Functions をMCPツールとして公開
+   - Recommendation, Preference, Tasting, Brewery
+
+4. **Backend Services**
+   - Lambda Functions (5つ)
+   - DynamoDB (4 tables)
+   - Cognito (Authentication)
+
+## 🚀 デプロイ手順
+
+### 前提条件
 
 ```bash
-# AWS設定
-AWS_REGION=us-west-2
-AWS_ACCOUNT_ID=your-aws-account-id
+# 必要なツール
+- AWS CLI v2
+- Docker
+- uv (Python package manager)
+- jq (JSON parser)
 
-# Cognito設定（Phase 2で取得済み）
-COGNITO_USER_POOL_ID=us-west-2_XXXXXXXXX
-COGNITO_CLIENT_ID=your-cognito-client-id
-COGNITO_CLIENT_SECRET=your-cognito-client-secret
-
-# Lambda ARN（Phase 3で取得済み）
-LAMBDA_RECOMMENDATION_ARN=arn:aws:lambda:...
-LAMBDA_PREFERENCE_ARN=arn:aws:lambda:...
-LAMBDA_TASTING_ARN=arn:aws:lambda:...
-LAMBDA_BREWERY_ARN=arn:aws:lambda:...
-LAMBDA_IMAGE_RECOGNITION_ARN=arn:aws:lambda:...
-
-# AgentCore設定（Phase 4で取得済み）
-AGENTCORE_GATEWAY_ID=your-gateway-id
-AGENTCORE_RUNTIME_URL=https://agent-runtime.bedrock.amazonaws.com
-AGENTCORE_GATEWAY_URL=https://gateway.bedrock.amazonaws.com
+# 環境変数
+cp .env.example .env
+vi .env  # 必須項目を設定
 ```
 
-## デプロイ手順
-
-### Step 1: インフラストラクチャのデプロイ
-
-CDKスタックをデプロイします（まだ完了していない場合）：
+### Step 1: インフラデプロイ（初回のみ）
 
 ```bash
+# DynamoDB, Lambda, Cognito
 cd infrastructure
+uv sync
 uv run cdk deploy --all
 
-# 以下のスタックがデプロイされます:
-# - SakeSensei-Storage: DynamoDB, S3
-# - SakeSensei-Auth: Cognito User Pool
-# - SakeSensei-Database: DynamoDB追加テーブル
-# - SakeSensei-Lambda: Lambda関数（5個）
+# 出力値を .env に記録
+# - COGNITO_USER_POOL_ID
+# - COGNITO_CLIENT_ID
+# - LAMBDA_*_ARN (5つ)
+# - DYNAMODB_*_TABLE (4つ)
 ```
 
-### Step 2: AWS Systems Manager Parameter Storeに環境変数を保存
-
-Copilotがシークレットを読み込めるように、Parameter Storeに保存します：
+### Step 2: Agentデプロイ
 
 ```bash
-# 環境変数をParameter Storeに保存
-aws ssm put-parameter \
-  --name "/copilot/sakesensei/dev/secrets/COGNITO_USER_POOL_ID" \
-  --value "YOUR_USER_POOL_ID" \
-  --type "String"
+# Agent to AgentCore Runtime
+./scripts/deploy_agent.sh
 
-aws ssm put-parameter \
-  --name "/copilot/sakesensei/dev/secrets/COGNITO_CLIENT_ID" \
-  --value "YOUR_CLIENT_ID" \
-  --type "String"
+# または手動:
+cd agent
+uv sync
+uv run ruff format . && uv run ruff check .
+uv run agentcore configure --entrypoint entrypoint.py
+uv run agentcore launch --region us-west-2
 
-aws ssm put-parameter \
-  --name "/copilot/sakesensei/dev/secrets/COGNITO_CLIENT_SECRET" \
-  --value "YOUR_CLIENT_SECRET" \
-  --type "SecureString"
-
-aws ssm put-parameter \
-  --name "/copilot/sakesensei/dev/secrets/AGENTCORE_RUNTIME_URL" \
-  --value "https://agent-runtime.bedrock.amazonaws.com" \
-  --type "String"
-
-aws ssm put-parameter \
-  --name "/copilot/sakesensei/dev/secrets/AGENTCORE_GATEWAY_URL" \
-  --value "https://gateway.bedrock.amazonaws.com" \
-  --type "String"
-
-aws ssm put-parameter \
-  --name "/copilot/sakesensei/dev/secrets/AGENTCORE_GATEWAY_ID" \
-  --value "YOUR_GATEWAY_ID" \
-  --type "String"
-
-# Lambda ARNsも同様に保存
-aws ssm put-parameter \
-  --name "/copilot/sakesensei/dev/secrets/LAMBDA_RECOMMENDATION_ARN" \
-  --value "YOUR_LAMBDA_ARN" \
-  --type "String"
-
-# 残りのLambda ARNsも同様に保存...
+# Runtime URLを .env に追加:
+# AGENTCORE_RUNTIME_URL=https://agent-runtime-xxx.execute-api.us-west-2.amazonaws.com
 ```
 
-または、一括設定スクリプトを使用：
+### Step 3: Streamlitデプロイ
 
 ```bash
-# スクリプトに実行権限を付与
-chmod +x scripts/deploy/setup_ssm_parameters.sh
+# Streamlit to ECS
+./scripts/deploy.sh patch
 
-# スクリプトを実行
-./scripts/deploy/setup_ssm_parameters.sh dev
-```
-
-### Step 3: Copilot初期化
-
-```bash
-# Copilotアプリケーションを初期化（初回のみ）
-copilot app init sakesensei
-
-# 開発環境を作成（初回のみ）
-copilot env init --name dev \
-  --profile default \
-  --default-config
-
-# 環境をデプロイ
-copilot env deploy --name dev
-```
-
-### Step 4: Dockerイメージのビルドとプッシュ
-
-```bash
-# ECRにイメージをプッシュ
-chmod +x scripts/deploy/push_to_ecr.sh
-./scripts/deploy/push_to_ecr.sh v1.0.0
-```
-
-または、手動でプッシュ：
-
-```bash
-# ECRにログイン
-aws ecr get-login-password --region us-west-2 | \
-  docker login --username AWS --password-stdin \
-  $(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-west-2.amazonaws.com
-
-# イメージをビルド
+# 手動の場合:
 cd streamlit_app
-docker build -t sakesensei:v1.0.0 .
-
-# タグ付け
-docker tag sakesensei:v1.0.0 \
-  $(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-west-2.amazonaws.com/sakesensei:v1.0.0
-
-# プッシュ
-docker push \
-  $(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-west-2.amazonaws.com/sakesensei:v1.0.0
+docker build -t sakesensei:latest .
+# ECRプッシュ & ECS更新
 ```
 
-### Step 5: Copilotサービスの初期化とデプロイ
+### Step 4: 動作確認
 
 ```bash
-# サービスを初期化（初回のみ）
-copilot svc init \
-  --name streamlit-app \
-  --svc-type "Load Balanced Web Service" \
-  --dockerfile ./streamlit_app/Dockerfile
+# Health Check
+curl http://sakese-Publi-BG2ScFFG5nfS-804827597.us-west-2.elb.amazonaws.com
 
-# サービスをデプロイ
-copilot svc deploy \
-  --name streamlit-app \
-  --env dev \
-  --tag v1.0.0
+# E2Eテスト
+cd tests/e2e
+export BASE_URL=http://...
+uv run pytest test_authentication.py -v
+uv run pytest test_ai_chat.py -v
 ```
 
-### Step 6: デプロイの確認
+## 🔧 トラブルシューティング
+
+### Agent デプロイエラー
 
 ```bash
-# デプロイ状態を確認
-copilot svc status --name streamlit-app --env dev
+# AWS認証確認
+aws sts get-caller-identity
 
-# サービスログを確認
-copilot svc logs --name streamlit-app --env dev --follow
-
-# サービスURLを取得
-copilot svc show --name streamlit-app --env dev
+# 手動config作成
+cd agent
+cat > .agentcore.yaml <<EOF
+version: "1.0"
+entrypoint: entrypoint.py
+runtime: python3.12
+EOF
+uv run agentcore launch --region us-west-2
 ```
 
-## トラブルシューティング
-
-### サービスが起動しない場合
+### Runtime 接続エラー
 
 ```bash
-# ECS タスクのログを確認
-copilot svc logs --name streamlit-app --env dev --since 1h
+# Runtime URL確認
+echo $AGENTCORE_RUNTIME_URL
 
-# ECS タスク定義を確認
+# 手動リクエスト
+curl -X POST $AGENTCORE_RUNTIME_URL/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "test"}'
+
+# フォールバックモード
+# .env の AGENTCORE_RUNTIME_URL を空に設定
+```
+
+### Streamlit 起動エラー
+
+```bash
+# CloudWatch Logs確認
+aws logs tail /ecs/sakesensei-streamlit --follow
+
+# 環境変数確認
 aws ecs describe-task-definition \
-  --task-definition sakesensei-dev-streamlit-app \
-  --query 'taskDefinition.containerDefinitions[0]'
+  --task-definition sakesensei-streamlit-app
 ```
 
-### ヘルスチェックが失敗する場合
+## 📊 デプロイ後チェックリスト
+
+- [ ] ECS Service が Running
+- [ ] ALB Health Check が Healthy
+- [ ] Cognito ログイン成功
+- [ ] AI Chat 応答（Runtime経由）
+- [ ] AI Chat 応答（Bedrock直接 fallback）
+- [ ] Image Recognition 動作
+- [ ] Recommendations 取得
+- [ ] DynamoDB 記録保存
+
+## 🔄 更新デプロイ
+
+### コード変更
 
 ```bash
-# コンテナ内でヘルスチェックエンドポイントをテスト
-copilot svc exec --name streamlit-app --env dev \
-  --command "curl -f http://localhost:8501/_stcore/health"
+# Streamlit
+uv run ruff format streamlit_app
+uv run ruff check streamlit_app
+./scripts/deploy.sh patch
+
+# Agent
+cd agent
+uv run ruff format . && uv run ruff check .
+./scripts/deploy_agent.sh
 ```
 
-### IAM権限エラーの場合
+## 📝 環境変数
 
-`copilot/streamlit-app/addons/iam-policy.yml`を確認し、必要な権限が付与されているか確認してください。
+### 必須
 
-## アップデート手順
+| 変数 | 説明 | 例 |
+|------|------|-----|
+| `AWS_REGION` | リージョン | `us-west-2` |
+| `AWS_ACCOUNT_ID` | アカウントID | `123456789012` |
+| `COGNITO_USER_POOL_ID` | Cognito Pool | `us-west-2_XXXXX` |
+| `COGNITO_CLIENT_ID` | Cognito Client | `abcdef123456` |
 
-### コードの更新
+### AgentCore（推奨）
 
-```bash
-# 1. コードを更新
-git pull origin main
+| 変数 | 説明 | 例 |
+|------|------|-----|
+| `AGENTCORE_RUNTIME_URL` | Runtime API | `https://agent-runtime-xxx...` |
+| `AGENTCORE_GATEWAY_URL` | Gateway API | `https://gateway-xxx...` |
+| `AGENTCORE_GATEWAY_ID` | Gateway ID | `gateway-12345` |
 
-# 2. 新しいイメージをビルド・プッシュ
-./scripts/deploy/push_to_ecr.sh v1.0.1
+## 🎯 次のステップ
 
-# 3. サービスを再デプロイ
-copilot svc deploy --name streamlit-app --env dev --tag v1.0.1
-```
+1. **モニタリング**: CloudWatch Dashboard, Alarms, X-Ray
+2. **最適化**: Auto Scaling, CloudFront CDN
+3. **セキュリティ**: WAF, Secrets Manager, VPC Endpoints
+4. **CI/CD**: GitHub Actions, Blue/Green Deployment
 
-### 環境変数の更新
+## 📚 参考資料
 
-```bash
-# Parameter Storeの値を更新
-aws ssm put-parameter \
-  --name "/copilot/sakesensei/dev/secrets/COGNITO_CLIENT_ID" \
-  --value "NEW_CLIENT_ID" \
-  --type "String" \
-  --overwrite
+- [Amazon Bedrock AgentCore](https://docs.aws.amazon.com/bedrock/agentcore/)
+- [Strands Agents Framework](https://github.com/anthropics/strands)
+- [AWS Copilot CLI](https://aws.github.io/copilot-cli/)
+- [Streamlit Docs](https://docs.streamlit.io/)
 
-# サービスを再起動（環境変数を再読み込み）
-copilot svc deploy --name streamlit-app --env dev --force
-```
+---
 
-## ロールバック
-
-```bash
-# 以前のバージョンにロールバック
-copilot svc deploy --name streamlit-app --env dev --tag v1.0.0
-```
-
-## リソースのクリーンアップ
-
-```bash
-# サービスを削除
-copilot svc delete --name streamlit-app --env dev
-
-# 環境を削除
-copilot env delete --name dev
-
-# アプリケーションを削除
-copilot app delete
-
-# CDKスタックを削除
-cd infrastructure
-uv run cdk destroy --all
-```
-
-## 本番環境へのデプロイ
-
-本番環境へのデプロイ手順：
-
-```bash
-# 本番環境を作成
-copilot env init --name prod --profile default --prod
-
-# 本番環境用のParameter Storeを設定
-./scripts/deploy/setup_ssm_parameters.sh prod
-
-# 本番環境にデプロイ
-copilot env deploy --name prod
-copilot svc deploy --name streamlit-app --env prod --tag v1.0.0
-```
-
-## モニタリングとログ
-
-### CloudWatch Logs
-
-```bash
-# ログストリームを確認
-copilot svc logs --name streamlit-app --env dev --follow
-```
-
-### CloudWatch Metrics
-
-```bash
-# CloudWatch コンソールでメトリクスを確認
-# https://console.aws.amazon.com/cloudwatch/
-```
-
-### X-Ray トレーシング
-
-Copilotは自動的にX-Rayトレーシングを有効化します。
-
-## セキュリティ考慮事項
-
-1. **HTTPS通信**: ALBは自動的にHTTPSリスナーを設定します
-2. **シークレット管理**: すべての機密情報はParameter Store（SecureString）に保存
-3. **IAM最小権限**: addonsで定義されたポリシーは最小権限の原則に従う
-4. **VPC分離**: ECSタスクはプライベートサブネットで実行
-
-## 参考リンク
-
-- [AWS Copilot CLI ドキュメント](https://aws.github.io/copilot-cli/)
-- [Streamlit ドキュメント](https://docs.streamlit.io/)
-- [Amazon ECS ドキュメント](https://docs.aws.amazon.com/ecs/)
-- [AWS CDK ドキュメント](https://docs.aws.amazon.com/cdk/)
+**最終更新**: 2025-10-01 | **バージョン**: v0.1.0

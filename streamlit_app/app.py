@@ -5,6 +5,7 @@ AI-powered sake recommendation system powered by Amazon Bedrock AgentCore.
 """
 
 import streamlit as st
+from components.agent_client import render_agent_chat
 from components.auth import CognitoAuth
 from utils.session import SessionManager
 
@@ -299,6 +300,19 @@ def show_confirmation_form():
             st.rerun()
 
 
+def show_ai_chat_section():
+    """Display AI chat section for asking questions to Sake Sensei."""
+    try:
+        st.markdown("---")
+        st.markdown("### 🤖 Sake Sensei に質問")
+
+        # Use agent_client component for AI chat
+        render_agent_chat()
+
+    except Exception as e:
+        st.error(f"AI Chatセクションの表示中にエラーが発生しました: {str(e)}")
+
+
 def show_main_app():
     """Display main application for authenticated users."""
     auth = CognitoAuth()
@@ -326,6 +340,9 @@ def show_main_app():
 
     # Main content
     st.markdown("## 🏠 ホーム")
+
+    # AI Chat Section
+    show_ai_chat_section()
 
     st.markdown("""
     ### ようこそ、Sake Sensei へ！
