@@ -1,25 +1,26 @@
 """
-Sake Sensei - AgentCore Runtime Client
+Sake Sensei - AI Agent Client
 
-Client for communicating with Sake Sensei Strands Agent on AgentCore Runtime.
+Client for AI-powered sake recommendations using Amazon Bedrock.
 """
 
-import json
 from collections.abc import Generator
 from typing import Any
 
-import requests
 import streamlit as st
+from components.bedrock_client import BedrockClient
 from utils.config import config
 from utils.session import SessionManager
 
 
 class AgentCoreClient:
-    """Client for AgentCore Runtime communication."""
+    """Client for AI agent communication (using Bedrock)."""
 
     def __init__(self):
-        """Initialize AgentCore client."""
-        self.runtime_url = config.AGENTCORE_RUNTIME_URL
+        """Initialize AI client."""
+        # Use Bedrock directly instead of AgentCore
+        self.bedrock_client = BedrockClient()
+        self.runtime_url = config.AGENTCORE_RUNTIME_URL  # Keep for future AgentCore migration
         self.agent_id = config.AGENTCORE_AGENT_ID
         self.gateway_url = config.AGENTCORE_GATEWAY_URL
 
@@ -47,61 +48,33 @@ class AgentCoreClient:
 
         Args:
             prompt: User prompt/message
-            session_id: Optional session ID for conversation continuity
-            context: Optional additional context
+            session_id: Optional session ID for conversation continuity (not used yet)
+            context: Optional additional context (not used yet)
 
         Yields:
             Streaming response chunks
         """
-        # Build request payload
-        payload = {
-            "prompt": prompt,
-            "userId": SessionManager.get_user_id(),
-        }
-
-        if session_id:
-            payload["sessionId"] = session_id
-
-        if context:
-            payload["context"] = context
+        # Note: session_id and context parameters kept for future AgentCore migration
+        _ = session_id
+        _ = context
 
         try:
-            # Make streaming request to AgentCore Runtime
-            response = requests.post(
-                f"{self.runtime_url}/invoke",
-                json=payload,
-                headers=self._get_headers(),
-                stream=True,
-                timeout=60,
+            # Get chat history from session
+            chat_history = SessionManager.get_chat_history()
+
+            # Get user preferences if available
+            user_context = {}
+            preferences = SessionManager.get_preferences()
+            if preferences:
+                user_context["preferences"] = preferences
+
+            # Use Bedrock for AI responses
+            yield from self.bedrock_client.invoke_streaming(
+                prompt=prompt, chat_history=chat_history, user_context=user_context
             )
 
-            if response.status_code != 200:
-                yield {
-                    "type": "error",
-                    "error": f"Agent invocation failed: {response.status_code} {response.text}",
-                }
-                return
-
-            # Process streaming response
-            for line in response.iter_lines():
-                if line:
-                    try:
-                        # Parse JSON event
-                        event = json.loads(line.decode("utf-8"))
-                        yield event
-
-                    except json.JSONDecodeError:
-                        # Skip malformed lines
-                        continue
-
-        except requests.exceptions.Timeout:
-            yield {"type": "error", "error": "Request timeout. Please try again."}
-
-        except requests.exceptions.RequestException as e:
-            yield {"type": "error", "error": f"Network error: {str(e)}"}
-
         except Exception as e:
-            yield {"type": "error", "error": f"Unexpected error: {str(e)}"}
+            yield {"type": "error", "error": f"AI error: {str(e)}"}
 
     def invoke_agent_simple(self, prompt: str, session_id: str | None = None) -> str:
         """

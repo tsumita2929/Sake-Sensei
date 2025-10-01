@@ -78,6 +78,43 @@ class CognitoAuth:
         except Exception as e:
             return False, f"予期しないエラー: {str(e)}"
 
+    def resend_confirmation_code(self, email: str) -> tuple[bool, str]:
+        """
+        Resend confirmation code to user email.
+
+        Args:
+            email: User email
+
+        Returns:
+            Tuple of (success: bool, message: str)
+        """
+        try:
+            params = {"ClientId": self.client_id, "Username": email}
+
+            secret_hash = self._get_secret_hash(email)
+            if secret_hash:
+                params["SecretHash"] = secret_hash
+
+            self.client.resend_confirmation_code(**params)
+
+            return True, "確認コードを再送信しました。メールをご確認ください。"
+
+        except ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            error_msg = e.response["Error"]["Message"]
+
+            if error_code == "UserNotFoundException":
+                return False, "ユーザーが見つかりません。"
+            elif error_code == "InvalidParameterException":
+                return False, "ユーザーは既に確認済みです。"
+            elif error_code == "LimitExceededException":
+                return False, "再送信の上限に達しました。しばらく待ってから再度お試しください。"
+            else:
+                return False, f"再送信エラー: {error_msg}"
+
+        except Exception as e:
+            return False, f"予期しないエラー: {str(e)}"
+
     def confirm_sign_up(self, email: str, confirmation_code: str) -> tuple[bool, str]:
         """
         Confirm user registration with code.

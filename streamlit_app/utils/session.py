@@ -154,6 +154,15 @@ class SessionManager:
         """Get AgentCore session ID."""
         return st.session_state.get(SessionManager.KEY_AGENT_SESSION_ID)
 
+    @staticmethod
+    def get_user_info() -> dict:
+        """Get current user information."""
+        return {
+            "user_id": SessionManager.get_user_id(),
+            "email": SessionManager.get_user_email(),
+            "name": SessionManager.get_user_name(),
+        }
+
 
 # Initialize session on module import
 SessionManager.init()

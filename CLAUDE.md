@@ -290,6 +290,22 @@ SakeSensei/
 - Add **docstrings** for all public functions and classes
 - Use **Ruff** for linting and formatting
 
+### ⚠️ Ruff Warnings Must Be Fixed
+
+**MANDATORY**: All ruff warnings MUST be fixed before deployment. Do NOT ignore any warnings.
+
+- `ARG002` (Unused arguments): Either use the argument or mark with `_ = arg_name`
+- `F401` (Unused imports): Remove all unused imports
+- `UP028` (yield over for loop): Use `yield from` instead of `for` loop with `yield`
+- `SIM116` (if/elif chains): Can be ignored if code is more readable with if/elif
+- All other warnings: Must be fixed
+
+**Process**:
+1. Run `uv run ruff check --fix` to auto-fix
+2. Manually fix remaining warnings
+3. Verify with `uv run ruff check` - MUST show "All checks passed!"
+4. Only then proceed to deployment
+
 ### Other Formats
 
 - **GraphQL**: 2 spaces indentation, PascalCase types, camelCase fields

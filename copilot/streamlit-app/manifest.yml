@@ -46,16 +46,13 @@ variables:
   AWS_REGION: us-west-2
   FEATURE_IMAGE_RECOGNITION: true
   FEATURE_EXPORT_HISTORY: false
-  COGNITO_USER_POOL_ID: us-west-2_aGgG1sEaO
-  COGNITO_CLIENT_ID: msc2tlhn84kakjj4bu85obosd
-  AGENTCORE_RUNTIME_URL: https://agent-runtime.bedrock.amazonaws.com
-  AGENTCORE_GATEWAY_URL: https://gateway.bedrock.us-west-2.amazonaws.com/sakesensei-gateway-98idnabr4g
-  AGENTCORE_GATEWAY_ID: sakesensei-gateway-98idnabr4g
-  LAMBDA_RECOMMENDATION_ARN: arn:aws:lambda:us-west-2:093325005283:function:SakeSensei-Recommendation
-  LAMBDA_PREFERENCE_ARN: arn:aws:lambda:us-west-2:093325005283:function:SakeSensei-Preference
-  LAMBDA_TASTING_ARN: arn:aws:lambda:us-west-2:093325005283:function:SakeSensei-Tasting
-  LAMBDA_BREWERY_ARN: arn:aws:lambda:us-west-2:093325005283:function:SakeSensei-Brewery
-  LAMBDA_IMAGE_RECOGNITION_ARN: arn:aws:lambda:us-west-2:093325005283:function:SakeSensei-ImageRecognition
+  COGNITO_USER_POOL_ID: us-west-2_jF4QBUGBd
+  COGNITO_CLIENT_ID: 74fvahd8h9gfvb5pfn0mchm0uk
+  LAMBDA_RECOMMENDATION_ARN: arn:aws:lambda:us-west-2:047786098634:function:SakeSensei-Recommendation
+  LAMBDA_PREFERENCE_ARN: arn:aws:lambda:us-west-2:047786098634:function:SakeSensei-Preference
+  LAMBDA_TASTING_ARN: arn:aws:lambda:us-west-2:047786098634:function:SakeSensei-Tasting
+  LAMBDA_BREWERY_ARN: arn:aws:lambda:us-west-2:047786098634:function:SakeSensei-Brewery
+  LAMBDA_IMAGE_RECOGNITION_ARN: arn:aws:lambda:us-west-2:047786098634:function:SakeSensei-ImageRecognition
 
 # IAM Permissions
 # Attach IAM policies to allow the task to invoke Lambda functions and access DynamoDB

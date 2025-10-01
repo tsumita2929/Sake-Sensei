@@ -7,6 +7,7 @@ Loads master data from JSON files and seeds DynamoDB tables.
 
 import json
 import sys
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +42,36 @@ def load_json_file(file_path: Path) -> list[dict[str, Any]]:
         return data
 
 
+def convert_to_dynamodb_types(obj: Any) -> Any:
+    """Convert Python types to DynamoDB-compatible types.
+
+    Args:
+        obj: Object to convert
+
+    Returns:
+        DynamoDB-compatible object
+    """
+    # Import pydantic URL types
+    try:
+        from pydantic_core import Url as PydanticUrl
+    except ImportError:
+        PydanticUrl = None
+
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    elif PydanticUrl and isinstance(obj, PydanticUrl):
+        return str(obj)
+    elif isinstance(obj, dict):
+        return {k: convert_to_dynamodb_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_dynamodb_types(v) for v in obj]
+    elif hasattr(obj, '__class__') and 'pydantic' in obj.__class__.__module__:
+        # Catch any other pydantic types
+        return str(obj)
+    else:
+        return obj
+
+
 def seed_breweries(dynamodb: Any, table_name: str, breweries_data: list[dict[str, Any]]) -> int:
     """Seed brewery master data into DynamoDB.
 
@@ -64,6 +95,13 @@ def seed_breweries(dynamodb: Any, table_name: str, breweries_data: list[dict[str
             item = brewery.model_dump()
             item["created_at"] = brewery.created_at.isoformat()
             item["updated_at"] = brewery.updated_at.isoformat()
+
+            # Convert website URL to string
+            if "website" in item and item["website"] is not None:
+                item["website"] = str(item["website"])
+
+            # Convert float to Decimal for DynamoDB
+            item = convert_to_dynamodb_types(item)
 
             # Insert into DynamoDB
             table.put_item(Item=item)
@@ -102,6 +140,9 @@ def seed_sake(dynamodb: Any, table_name: str, sake_data: list[dict[str, Any]]) -
             item = sake.model_dump()
             item["created_at"] = sake.created_at.isoformat()
             item["updated_at"] = sake.updated_at.isoformat()
+
+            # Convert float to Decimal for DynamoDB
+            item = convert_to_dynamodb_types(item)
 
             # Insert into DynamoDB
             table.put_item(Item=item)
@@ -147,7 +188,7 @@ def main() -> None:
 
         # Initialize DynamoDB client
         print("\n🔌 Connecting to DynamoDB...")
-        dynamodb = boto3.resource("dynamodb")
+        dynamodb = boto3.resource("dynamodb", region_name=os.getenv("AWS_REGION", "us-west-2"))
 
         # Seed breweries first (sake reference brewery_id)
         print(f"\n🏭 Seeding breweries into {brewery_table_name}...")

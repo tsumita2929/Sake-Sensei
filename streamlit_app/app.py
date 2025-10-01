@@ -5,6 +5,8 @@ AI-powered sake recommendation system powered by Amazon Bedrock AgentCore.
 """
 
 import streamlit as st
+from components.auth import CognitoAuth
+from utils.session import SessionManager
 
 # Configure page
 st.set_page_config(
@@ -62,11 +64,8 @@ def main():
         unsafe_allow_html=True,
     )
 
-    # Check authentication status
-    if "authenticated" not in st.session_state:
-        st.session_state.authenticated = False
-
-    if not st.session_state.authenticated:
+    # Check authentication status using SessionManager
+    if not SessionManager.is_authenticated():
         show_welcome_page()
     else:
         show_main_app()
@@ -130,79 +129,186 @@ def show_welcome_page():
                 st.session_state.show_signup = True
                 st.rerun()
 
-        # Show login/signup forms if requested
+        # Show login/signup/confirmation forms if requested
         if st.session_state.get("show_login", False):
             show_login_form()
 
         if st.session_state.get("show_signup", False):
             show_signup_form()
 
+        if st.session_state.get("pending_confirmation_email"):
+            show_confirmation_form()
+
 
 def show_login_form():
     """Display login form."""
+    auth = CognitoAuth()
+
     st.markdown("---")
-    st.markdown("### ログイン")
+    st.markdown("### 🔐 ログイン")
+
+    # Show error message if exists
+    if "login_error" in st.session_state:
+        st.error(st.session_state["login_error"])
+        del st.session_state["login_error"]
 
     with st.form("login_form"):
         email = st.text_input("メールアドレス", placeholder="your.email@example.com")
         password = st.text_input("パスワード", type="password")
 
-        col1, col2 = st.columns([3, 1])
+        col1, col2, col3 = st.columns([2, 1, 1])
         with col2:
-            submit = st.form_submit_button("ログイン", use_container_width=True)
+            cancel = st.form_submit_button("キャンセル", use_container_width=True)
+        with col3:
+            submit = st.form_submit_button("ログイン", use_container_width=True, type="primary")
+
+        if cancel:
+            st.session_state.show_login = False
+            st.rerun()
 
         if submit:
             if email and password:
-                # TODO: Implement Cognito authentication
-                st.info("🚧 Cognito認証機能は実装中です")
-                # For now, allow mock login
-                if email == "demo@example.com":
-                    st.session_state.authenticated = True
-                    st.session_state.user_id = "demo-user"
-                    st.session_state.user_email = email
-                    st.success("✅ ログイン成功！")
-                    st.rerun()
-                else:
-                    st.error("❌ 認証に失敗しました")
+                with st.spinner("認証中..."):
+                    success, message, tokens = auth.sign_in(email, password)
+
+                    if success and tokens:
+                        # Extract user info
+                        user_info = tokens.get("user_info", {})
+                        user_id = user_info.get("sub", email)
+                        user_name = user_info.get("name", "")
+
+                        # Store in session
+                        SessionManager.login(
+                            user_id=user_id,
+                            email=email,
+                            name=user_name,
+                            access_token=tokens["access_token"],
+                            id_token=tokens["id_token"],
+                            refresh_token=tokens.get("refresh_token"),
+                        )
+
+                        # Clear login form state
+                        st.session_state.show_login = False
+
+                        # Rerun immediately without showing success message
+                        st.rerun()
+                    else:
+                        st.session_state["login_error"] = message
+                        st.rerun()
             else:
                 st.warning("⚠️ メールアドレスとパスワードを入力してください")
 
 
 def show_signup_form():
     """Display signup form."""
+    auth = CognitoAuth()
+
     st.markdown("---")
-    st.markdown("### 新規登録")
+    st.markdown("### ✨ 新規登録")
 
     with st.form("signup_form"):
-        email = st.text_input("メールアドレス", placeholder="your.email@example.com")
-        password = st.text_input("パスワード", type="password")
-        password_confirm = st.text_input("パスワード（確認）", type="password")
         name = st.text_input("お名前", placeholder="山田 太郎")
+        email = st.text_input("メールアドレス", placeholder="your.email@example.com")
+        password = st.text_input("パスワード (12文字以上)", type="password")
+        password_confirm = st.text_input("パスワード（確認）", type="password")
 
-        col1, col2 = st.columns([3, 1])
+        st.info("💡 パスワード要件: 12文字以上、大文字・小文字・数字・記号を含む")
+
+        col1, col2, col3 = st.columns([2, 1, 1])
         with col2:
-            submit = st.form_submit_button("登録", use_container_width=True)
+            cancel = st.form_submit_button("キャンセル", use_container_width=True)
+        with col3:
+            submit = st.form_submit_button("登録", use_container_width=True, type="primary")
+
+        if cancel:
+            st.session_state.show_signup = False
+            st.rerun()
 
         if submit:
-            if email and password and password_confirm and name:
+            if name and email and password and password_confirm:
                 if password != password_confirm:
                     st.error("❌ パスワードが一致しません")
+                elif len(password) < 12:
+                    st.error("❌ パスワードは12文字以上である必要があります")
                 else:
-                    # TODO: Implement Cognito signup
-                    st.info("🚧 Cognito登録機能は実装中です")
-                    st.info("デモ用: demo@example.com でログインしてください")
+                    with st.spinner("登録中..."):
+                        success, message = auth.sign_up(email, password, name)
+
+                        if success:
+                            st.success(message)
+                            st.session_state["pending_confirmation_email"] = email
+                            st.session_state.show_signup = False
+                            st.rerun()
+                        else:
+                            st.error(message)
             else:
                 st.warning("⚠️ すべての項目を入力してください")
 
 
+def show_confirmation_form():
+    """Display confirmation code input form."""
+    auth = CognitoAuth()
+    email = st.session_state.get("pending_confirmation_email", "")
+
+    st.markdown("---")
+    st.markdown("### 📧 メール確認")
+
+    # Show resend confirmation message if exists
+    if "resend_message" in st.session_state:
+        if st.session_state["resend_message"]["success"]:
+            st.success(st.session_state["resend_message"]["text"])
+        else:
+            st.error(st.session_state["resend_message"]["text"])
+        del st.session_state["resend_message"]
+
+    with st.form("confirmation_form"):
+        st.info(f"📨 {email} に送信された確認コードを入力してください")
+
+        confirmation_code = st.text_input("確認コード (6桁)", placeholder="123456", max_chars=6)
+
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col2:
+            cancel = st.form_submit_button("キャンセル", use_container_width=True)
+        with col3:
+            submit = st.form_submit_button("確認", use_container_width=True, type="primary")
+
+        if cancel:
+            del st.session_state["pending_confirmation_email"]
+            st.rerun()
+
+        if submit:
+            if confirmation_code:
+                with st.spinner("確認中..."):
+                    success, message = auth.confirm_sign_up(email, confirmation_code)
+
+                    if success:
+                        st.success(message)
+                        del st.session_state["pending_confirmation_email"]
+                        st.session_state.show_login = True
+                        st.rerun()
+                    else:
+                        st.error(message)
+            else:
+                st.warning("⚠️ 確認コードを入力してください")
+
+    # Resend button outside the form
+    if st.button("🔄 確認コードを再送信", use_container_width=False):
+        with st.spinner("再送信中..."):
+            success, message = auth.resend_confirmation_code(email)
+            st.session_state["resend_message"] = {"success": success, "text": message}
+            st.rerun()
+
+
 def show_main_app():
     """Display main application for authenticated users."""
+    auth = CognitoAuth()
 
     # Sidebar
     with st.sidebar:
         st.markdown("### 👤 ユーザー情報")
-        st.write(f"**Email**: {st.session_state.get('user_email', 'Unknown')}")
-        st.write(f"**User ID**: {st.session_state.get('user_id', 'Unknown')}")
+        user_info = SessionManager.get_user_info()
+        st.write(f"**名前**: {user_info.get('name', '未設定')}")
+        st.write(f"**Email**: {user_info.get('email', 'Unknown')}")
 
         st.markdown("---")
 
@@ -212,9 +318,10 @@ def show_main_app():
         st.markdown("---")
 
         if st.button("🚪 ログアウト", use_container_width=True):
-            st.session_state.authenticated = False
-            st.session_state.user_id = None
-            st.session_state.user_email = None
+            access_token = st.session_state.get("access_token")
+            if access_token:
+                auth.sign_out(access_token)
+            SessionManager.logout()
             st.rerun()
 
     # Main content
